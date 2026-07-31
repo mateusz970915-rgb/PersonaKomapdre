@@ -1,23 +1,29 @@
 package com.example.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.filled.ViewList
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.GroupOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -130,7 +136,7 @@ fun AgentDashboardScreen(
                     },
                     actions = {
                         IconButton(onClick = { isGroupedBySpecialty = !isGroupedBySpecialty }) {
-                            Icon(if (isGroupedBySpecialty) Icons.Default.GridView else Icons.Default.ViewList, contentDescription = "Toggle Grouping")
+                            Icon(if (isGroupedBySpecialty) Icons.Default.GridView else Icons.AutoMirrored.Filled.ViewList, contentDescription = "Toggle Grouping")
                         }
                         IconButton(onClick = { exportLauncher.launch("agents_backup.json") }) {
                             Icon(Icons.Default.FileDownload, contentDescription = "Export JSON")
@@ -151,7 +157,7 @@ fun AgentDashboardScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("Search agents...") },
+                placeholder = { Text("Search agents by name...") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
                 singleLine = true
             )
@@ -226,7 +232,11 @@ fun AgentDashboardScreen(
                                                     if (!isSelectionMode) {
                                                         selectedAgentIds += agent.id
                                                     }
-                                                }
+                                                },
+                            onExport = {
+                                com.example.ui.exportSelectedAgents(context, listOf(agent)) { _, _ -> }
+                            }
+
                                             )
                                         }
                                     }
@@ -270,7 +280,11 @@ fun AgentDashboardScreen(
                                     if (!isSelectionMode) {
                                         selectedAgentIds += agent.id
                                     }
-                                }
+                                },
+                            onExport = {
+                                com.example.ui.exportSelectedAgents(context, listOf(agent)) { _, _ -> }
+                            }
+
                             )
                         }
                     }
@@ -288,9 +302,22 @@ fun AgentCard(
     isSelectionMode: Boolean,
     onDelete: () -> Unit,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    onExport: () -> Unit = {}
 ) {
     val isAgentActive = agent.status == "Active"
+    
+    val haptic = LocalHapticFeedback.current
+    
+    val now = System.currentTimeMillis()
+    val isOnline = (now - agent.lastActiveTimestamp) < (5 * 60 * 1000)
+    
+    val (statusText, statusColor) = when {
+        agent.status == "Resting" -> "Resting" to Color(0xFFFF9800)
+        agent.status == "Paused" || agent.status == "Halted" -> "Offline" to MaterialTheme.colorScheme.outline
+        isOnline -> "Online" to Color(0xFF4CAF50)
+        else -> "Offline" to MaterialTheme.colorScheme.outline
+    }
     
     val infiniteTransition = rememberInfiniteTransition()
     val pulseAlpha by infiniteTransition.animateFloat(
@@ -324,8 +351,14 @@ fun AgentCard(
             .clip(CardDefaults.shape)
             .border(if (isSelected || isAgentActive) 2.dp else 0.dp, borderColor, CardDefaults.shape)
             .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onClick()
+                },
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongClick()
+                }
             ),
         colors = CardDefaults.cardColors(
             containerColor = containerColor
@@ -373,19 +406,40 @@ fun AgentCard(
                     color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1
                 )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(statusColor)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = statusColor
+                    )
+                }
             }
             
             if (!isSelectionMode) {
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.align(Alignment.TopEnd)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
+                Row(modifier = Modifier.align(Alignment.TopEnd)) {
+                    IconButton(onClick = onExport) {
+                        Icon(imageVector = Icons.Default.Share, contentDescription = "Export Agent", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(imageVector = Icons.Default.Delete,
                         contentDescription = "Delete",
                         tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(20.dp)
-                    )
+                        modifier = Modifier.size(20.dp))
+                    }
                 }
             }
         }

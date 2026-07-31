@@ -14,6 +14,9 @@ interface ColonyDao {
     @Query("SELECT * FROM agents WHERE id = :id")
     suspend fun getAgentById(id: Int): Agent?
 
+    @Query("UPDATE agents SET statusNotes = :notes WHERE id = :id")
+    suspend fun updateAgentStatusNotes(id: Int, notes: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAgent(agent: Agent)
 
@@ -76,6 +79,9 @@ interface ColonyDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDataAccessRequest(request: DataAccessRequest)
+
+    @Query("UPDATE data_access_requests SET approvalStatus = :status WHERE id = :id")
+    suspend fun updateDataAccessApproval(id: Int, status: String)
     
     @Query("UPDATE sub_tasks SET status = 'Halted' WHERE status != 'Completed'")
     suspend fun haltAllSubTasks()
@@ -178,4 +184,124 @@ interface ColonyDao {
 
     @Query("SELECT * FROM sub_tasks WHERE status IN ('Completed', 'EXECUTED', 'SIMULATED')")
     fun getCompletedSubTasks(): Flow<List<SubTask>>
+
+    // Mission State Logs
+    @Query("SELECT * FROM mission_state_logs ORDER BY timestamp DESC")
+    fun getAllMissionStateLogs(): Flow<List<MissionStateLog>>
+
+    @Query("SELECT * FROM mission_state_logs WHERE missionId = :missionId ORDER BY timestamp DESC")
+    fun getMissionStateLogsForMission(missionId: Int): Flow<List<MissionStateLog>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMissionStateLog(log: MissionStateLog)
+
+    // Agent Negotiations
+    @Query("SELECT * FROM agent_negotiations ORDER BY timestamp DESC")
+    fun getAllAgentNegotiations(): Flow<List<AgentNegotiationProposal>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAgentNegotiation(negotiation: AgentNegotiationProposal)
+
+    @Query("UPDATE agent_negotiations SET status = :status, counterProposal = :counterProposal WHERE id = :id")
+    suspend fun updateNegotiationStatus(id: Int, status: String, counterProposal: String)
+
+    // Agent Mesh Telemetry
+    @Query("SELECT * FROM agent_mesh_telemetry ORDER BY timestamp DESC")
+    fun getAllMeshTelemetry(): Flow<List<AgentMeshTelemetry>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMeshTelemetry(telemetry: AgentMeshTelemetry)
+
+    @Query("DELETE FROM agent_mesh_telemetry WHERE id NOT IN (SELECT id FROM agent_mesh_telemetry ORDER BY timestamp DESC LIMIT 100)")
+    suspend fun trimOldTelemetry()
+
+    // Agent Knowledge Edges
+    @Query("SELECT * FROM agent_knowledge_edges ORDER BY timestamp DESC")
+    fun getAllKnowledgeEdges(): Flow<List<AgentKnowledgeEdge>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertKnowledgeEdge(edge: AgentKnowledgeEdge)
+
+    @Query("DELETE FROM agent_knowledge_edges WHERE id = :id")
+    suspend fun deleteKnowledgeEdge(id: Int)
+
+    // Agent Heuristics (Evolution Engine)
+    @Query("SELECT * FROM agent_heuristics ORDER BY generation DESC, confidenceScore DESC")
+    fun getAllHeuristics(): Flow<List<AgentHeuristicRule>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHeuristic(heuristic: AgentHeuristicRule)
+
+    @Query("DELETE FROM agent_heuristics WHERE id = :id")
+    suspend fun deleteHeuristic(id: Int)
+
+    // LLM Call Telemetry
+    @Query("SELECT * FROM llm_call_telemetry ORDER BY timestamp DESC")
+    fun getAllLlmTelemetry(): Flow<List<LlmCallTelemetry>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLlmTelemetry(telemetry: LlmCallTelemetry)
+
+    @Query("DELETE FROM llm_call_telemetry")
+    suspend fun clearLlmTelemetry()
+
+    // Finance Transactions
+    @Query("SELECT * FROM finance_transactions ORDER BY timestamp DESC")
+    fun getAllFinanceTransactions(): Flow<List<FinanceTransaction>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFinanceTransaction(transaction: FinanceTransaction)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFinanceTransactions(transactions: List<FinanceTransaction>)
+
+    @Query("DELETE FROM finance_transactions")
+    suspend fun clearFinanceTransactions()
+
+    // Custom Agent Definitions
+    @Query("SELECT * FROM custom_agent_definitions ORDER BY timestamp DESC")
+    fun getAllCustomAgentDefinitions(): Flow<List<CustomAgentDefinition>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCustomAgentDefinition(definition: CustomAgentDefinition)
+
+    @Query("DELETE FROM custom_agent_definitions WHERE id = :id")
+    suspend fun deleteCustomAgentDefinition(id: Int)
+
+    // Flashcards (Spaced Repetition)
+    @Query("SELECT * FROM flashcards ORDER BY nextReviewTime ASC")
+    fun getAllFlashcards(): Flow<List<Flashcard>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFlashcard(flashcard: Flashcard)
+
+    @Query("DELETE FROM flashcards WHERE id = :id")
+    suspend fun deleteFlashcard(id: Int)
+
+    // Subscriptions
+    @Query("SELECT * FROM subscriptions ORDER BY amount DESC")
+    fun getAllSubscriptions(): Flow<List<Subscription>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSubscription(subscription: Subscription)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSubscriptions(subscriptions: List<Subscription>)
+
+    @Query("DELETE FROM subscriptions WHERE id = :id")
+    suspend fun deleteSubscription(id: Int)
+
+    @Query("UPDATE subscriptions SET isCancelled = :isCancelled WHERE id = :id")
+    suspend fun updateSubscriptionCancelled(id: Int, isCancelled: Boolean)
+
+    // Sleep Records
+    @Query("SELECT * FROM sleep_records ORDER BY date DESC")
+    fun getAllSleepRecords(): Flow<List<SleepRecord>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSleepRecord(record: SleepRecord)
+
+    @Query("DELETE FROM sleep_records")
+    suspend fun clearSleepRecords()
 }
+

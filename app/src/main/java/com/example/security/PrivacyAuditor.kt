@@ -10,6 +10,7 @@ import com.example.network.GenerateContentRequest
 import com.example.network.Part
 import com.example.network.RetrofitClient
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 class PrivacyAuditor(private val context: Context) {
@@ -38,17 +39,16 @@ class PrivacyAuditor(private val context: Context) {
         """.trimIndent()
 
         val auditResultText = try {
-            val apiKey = BuildConfig.GEMINI_API_KEY
-            if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
+            val prefs = com.example.data.AgentPreferencesRepository(context).agentPreferencesFlow.first()
+            val isConfigured = if (prefs.aiProvider == "openrouter") {
+                prefs.openRouterApiKey.isNotBlank()
+            } else {
+                prefs.geminiApiKey.isNotBlank() || (BuildConfig.GEMINI_API_KEY.isNotBlank() && BuildConfig.GEMINI_API_KEY != "MY_GEMINI_API_KEY")
+            }
+            if (!isConfigured) {
                 "Audit failed: LLM Engine Offline. No API Key provided."
             } else {
-                val request = GenerateContentRequest(
-                    contents = listOf(Content(parts = listOf(Part(text = prompt))))
-                )
-                val response = withContext(Dispatchers.IO) {
-                    RetrofitClient.service.generateContent("gemini-3.5-flash", apiKey, request)
-                }
-                response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: "Audit failed: No response."
+                com.example.network.AILlmClient.generateContent(context, prompt)
             }
         } catch (e: Exception) {
             "Audit Error: ${e.message}"

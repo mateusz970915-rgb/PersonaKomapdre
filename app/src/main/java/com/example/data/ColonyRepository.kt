@@ -2,7 +2,7 @@ package com.example.data
 
 import kotlinx.coroutines.flow.Flow
 
-class ColonyRepository(private val colonyDao: ColonyDao) {
+class ColonyRepository(val colonyDao: ColonyDao) {
     val allAgents: Flow<List<Agent>> = colonyDao.getAllAgents()
     val councilMessages: Flow<List<CouncilMessage>> = colonyDao.getCouncilMessages()
     val allMemories: Flow<List<ColonyMemory>> = colonyDao.getMemories()
@@ -12,6 +12,7 @@ class ColonyRepository(private val colonyDao: ColonyDao) {
     val allSubTasks: Flow<List<SubTask>> = colonyDao.getAllSubTasks()
 
     suspend fun insertAgent(agent: Agent) = colonyDao.insertAgent(agent)
+    suspend fun updateAgentStatusNotes(id: Int, notes: String) = colonyDao.updateAgentStatusNotes(id, notes)
     suspend fun deleteAgentById(id: Int) = colonyDao.deleteAgentById(id)
     suspend fun getAgentCount(): Int = colonyDao.getAgentCount()
 
@@ -30,6 +31,7 @@ class ColonyRepository(private val colonyDao: ColonyDao) {
     }
     
     suspend fun insertDataAccessRequest(request: DataAccessRequest) = colonyDao.insertDataAccessRequest(request)
+    suspend fun updateDataAccessApproval(id: Int, status: String) = colonyDao.updateDataAccessApproval(id, status)
     
     suspend fun haltSystem() {
         colonyDao.haltAllSystems()
@@ -72,4 +74,65 @@ class ColonyRepository(private val colonyDao: ColonyDao) {
     suspend fun insertRuleConnections(connections: List<RuleConnectionEntity>) = colonyDao.insertRuleConnections(connections)
     suspend fun deleteRuleConnection(fromId: String, toId: String) = colonyDao.deleteRuleConnection(fromId, toId)
     suspend fun getRuleConnectionCount(): Int = colonyDao.getRuleConnectionCount()
+
+    // Mission State Logs
+    val allMissionStateLogs: Flow<List<MissionStateLog>> = colonyDao.getAllMissionStateLogs()
+    fun getMissionStateLogsForMission(missionId: Int): Flow<List<MissionStateLog>> = colonyDao.getMissionStateLogsForMission(missionId)
+    suspend fun insertMissionStateLog(log: MissionStateLog) = colonyDao.insertMissionStateLog(log)
+
+    // Agent Negotiations
+    val allAgentNegotiations: Flow<List<AgentNegotiationProposal>> = colonyDao.getAllAgentNegotiations()
+    suspend fun insertAgentNegotiation(negotiation: AgentNegotiationProposal) = colonyDao.insertAgentNegotiation(negotiation)
+    suspend fun updateNegotiationStatus(id: Int, status: String, counterProposal: String = "") = colonyDao.updateNegotiationStatus(id, status, counterProposal)
+
+    // Agent Mesh Telemetry
+    val allMeshTelemetry: Flow<List<AgentMeshTelemetry>> = colonyDao.getAllMeshTelemetry()
+    suspend fun insertMeshTelemetry(telemetry: AgentMeshTelemetry) {
+        colonyDao.insertMeshTelemetry(telemetry)
+        colonyDao.trimOldTelemetry()
+    }
+
+    // Agent Knowledge Edges
+    val allKnowledgeEdges: Flow<List<AgentKnowledgeEdge>> = colonyDao.getAllKnowledgeEdges()
+    suspend fun insertKnowledgeEdge(edge: AgentKnowledgeEdge) = colonyDao.insertKnowledgeEdge(edge)
+    suspend fun deleteKnowledgeEdge(id: Int) = colonyDao.deleteKnowledgeEdge(id)
+
+    // Agent Heuristics (Evolution Engine)
+    val allHeuristics: Flow<List<AgentHeuristicRule>> = colonyDao.getAllHeuristics()
+    suspend fun insertHeuristic(heuristic: AgentHeuristicRule) = colonyDao.insertHeuristic(heuristic)
+    suspend fun deleteHeuristic(id: Int) = colonyDao.deleteHeuristic(id)
+
+    // LLM Call Telemetry
+    val allLlmTelemetry: Flow<List<LlmCallTelemetry>> = colonyDao.getAllLlmTelemetry()
+    suspend fun insertLlmTelemetry(telemetry: LlmCallTelemetry) = colonyDao.insertLlmTelemetry(telemetry)
+    suspend fun clearLlmTelemetry() = colonyDao.clearLlmTelemetry()
+
+    // Finance Transactions
+    val allFinanceTransactions: Flow<List<FinanceTransaction>> = colonyDao.getAllFinanceTransactions()
+    suspend fun insertFinanceTransaction(transaction: FinanceTransaction) = colonyDao.insertFinanceTransaction(transaction)
+    suspend fun insertFinanceTransactions(transactions: List<FinanceTransaction>) = colonyDao.insertFinanceTransactions(transactions)
+    suspend fun clearFinanceTransactions() = colonyDao.clearFinanceTransactions()
+
+    // Custom Agent Definitions
+    val allCustomAgentDefinitions: Flow<List<CustomAgentDefinition>> = colonyDao.getAllCustomAgentDefinitions()
+    suspend fun insertCustomAgentDefinition(definition: CustomAgentDefinition) = colonyDao.insertCustomAgentDefinition(definition)
+    suspend fun deleteCustomAgentDefinition(id: Int) = colonyDao.deleteCustomAgentDefinition(id)
+
+    // Flashcards (Spaced Repetition)
+    val allFlashcards: Flow<List<Flashcard>> = colonyDao.getAllFlashcards()
+    suspend fun insertFlashcard(flashcard: Flashcard) = colonyDao.insertFlashcard(flashcard)
+    suspend fun deleteFlashcard(id: Int) = colonyDao.deleteFlashcard(id)
+
+    // Subscriptions
+    val allSubscriptions: Flow<List<Subscription>> = colonyDao.getAllSubscriptions()
+    suspend fun insertSubscription(subscription: Subscription) = colonyDao.insertSubscription(subscription)
+    suspend fun insertSubscriptions(subscriptions: List<Subscription>) = colonyDao.insertSubscriptions(subscriptions)
+    suspend fun deleteSubscription(id: Int) = colonyDao.deleteSubscription(id)
+    suspend fun updateSubscriptionCancelled(id: Int, isCancelled: Boolean) = colonyDao.updateSubscriptionCancelled(id, isCancelled)
+
+    // Sleep Records
+    val allSleepRecords: Flow<List<SleepRecord>> = colonyDao.getAllSleepRecords()
+    suspend fun insertSleepRecord(record: SleepRecord) = colonyDao.insertSleepRecord(record)
+    suspend fun clearSleepRecords() = colonyDao.clearSleepRecords()
 }
+

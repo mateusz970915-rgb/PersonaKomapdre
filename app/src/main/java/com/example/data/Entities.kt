@@ -19,7 +19,12 @@ data class Agent(
     val iconName: String = "default",
     val traits: String = "",
     val systemPrompt: String = "",
-    val performanceScore: Float = 1.0f
+    val performanceScore: Float = 1.0f,
+    val statusNotes: String = "",
+    val personaDescription: String = "",
+    val lastActiveTimestamp: Long = 0L,
+    val avatarUrl: String = "",
+    val configurationJson: String = "{}"
 )
 
 @Entity(tableName = "council_messages")
@@ -89,7 +94,9 @@ data class DataAccessRequest(
     val dataType: String,
     val timestamp: Long = System.currentTimeMillis(),
     val isPolicyViolation: Boolean = false,
-    val violationReason: String? = null
+    val violationReason: String? = null,
+    val requiresUserApproval: Boolean = false,
+    val approvalStatus: String = "Approved" // Pending, Approved, Denied
 )
 
 @Serializable
@@ -161,4 +168,165 @@ data class RuleConnectionEntity(
     val fromId: String,
     val toId: String
 )
+
+@Serializable
+@Entity(
+    tableName = "mission_state_logs",
+    foreignKeys = [
+        ForeignKey(
+            entity = Mission::class,
+            parentColumns = ["id"],
+            childColumns = ["missionId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [
+        Index(value = ["missionId"]),
+        Index(value = ["agentName"])
+    ]
+)
+data class MissionStateLog(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val missionId: Int,
+    val agentName: String,
+    val previousState: String,
+    val newState: String,
+    val message: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Serializable
+@Entity(tableName = "agent_negotiations")
+data class AgentNegotiationProposal(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val missionId: Int = 0,
+    val proposerAgent: String,
+    val targetAgent: String,
+    val proposedAction: String,
+    val counterProposal: String = "",
+    val status: String = "Pending", // Pending, Accepted, Rejected, Escalated, Countered
+    val conflictTopic: String = "Resource Allocation",
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Serializable
+@Entity(tableName = "agent_mesh_telemetry")
+data class AgentMeshTelemetry(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val agentId: Int,
+    val agentName: String,
+    val latencyMs: Long,
+    val cpuLoadPct: Float,
+    val memoryUsageMb: Float,
+    val activeConnectionsCount: Int,
+    val healthStatus: String = "Optimal", // Optimal, Warning, Degraded, Syncing
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Serializable
+@Entity(tableName = "agent_knowledge_edges")
+data class AgentKnowledgeEdge(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val sourceLabel: String,
+    val sourceType: String = "AGENT", // AGENT, MISSION, MEMORY, DECISION
+    val targetLabel: String,
+    val targetType: String = "CONCEPT", // CONCEPT, MISSION, AGENT, RULE
+    val relationType: String = "DEPENDS_ON", // DEPENDS_ON, CONFLICTS_WITH, CAUSES, IMPLEMENTS, ENFORCES
+    val weight: Float = 1.0f,
+    val creatorAgent: String = "System",
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Serializable
+@Entity(tableName = "agent_heuristics")
+data class AgentHeuristicRule(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val agentName: String,
+    val heuristicKey: String, // DELEGATION_PRIORITY, RISK_THRESHOLD, REASONING_DEPTH, EXECUTION_SPEED
+    val patternTarget: String, // HIGH_CONCURRENCY_TASKS, SECURITY_AUDIT, RESOURCE_OPT, GENERAL
+    val confidenceScore: Float = 0.8f,
+    val successCount: Int = 0,
+    val failureCount: Int = 0,
+    val adaptedPolicy: String,
+    val generation: Int = 1,
+    val lastEvolvedTimestamp: Long = System.currentTimeMillis()
+)
+
+@Serializable
+@Entity(tableName = "llm_call_telemetry")
+data class LlmCallTelemetry(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val provider: String,
+    val model: String,
+    val promptLength: Int,
+    val responseLength: Int,
+    val durationMs: Long,
+    val status: String, // "SUCCESS", "FAILED"
+    val errorMessage: String? = null,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Serializable
+@Entity(tableName = "finance_transactions")
+data class FinanceTransaction(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val title: String,
+    val amount: Double,
+    val category: String, // "Food", "Rent", "Utilities", "Salary", "Entertainment", "Other"
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Serializable
+@Entity(tableName = "custom_agent_definitions")
+data class CustomAgentDefinition(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val name: String,
+    val systemPrompt: String,
+    val temperature: Double,
+    val toolsAccess: String, // Comma-separated list or JSON
+    val autonomyLevel: String = "Medium",
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Serializable
+@Entity(tableName = "flashcards")
+data class Flashcard(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val question: String,
+    val answer: String,
+    val interval: Int = 1, // in days
+    val repetition: Int = 0, // consecutive successful repetitions
+    val easinessFactor: Float = 2.5f,
+    val nextReviewTime: Long = System.currentTimeMillis()
+)
+
+@Serializable
+@Entity(tableName = "subscriptions")
+data class Subscription(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val title: String,
+    val amount: Double,
+    val category: String,
+    val frequency: String = "Monthly",
+    val isCancelled: Boolean = false,
+    val nextBillingDate: Long = System.currentTimeMillis() + 30L * 24 * 3600 * 1000
+)
+
+@Serializable
+@Entity(tableName = "sleep_records")
+data class SleepRecord(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val date: String,
+    val sleepDurationHours: Float,
+    val deepSleepMinutes: Int,
+    val remSleepMinutes: Int,
+    val lightSleepMinutes: Int,
+    val recoveryScore: Int,
+    val heartRateAvg: Int,
+    val recommendation: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+
+
 

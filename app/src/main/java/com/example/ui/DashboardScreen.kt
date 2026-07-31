@@ -1,5 +1,12 @@
 package com.example.ui
 
+import com.example.ui.components.AgentCard
+import com.example.ui.components.CreateAgentDialog
+import com.example.ui.components.TranslateTextInPlace
+import com.example.ui.components.FocusModeSuite
+import com.example.ui.components.VoiceCommandDialog
+import com.example.ui.components.RelationshipNudgesWidget
+
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.net.Uri
@@ -30,6 +37,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
@@ -49,6 +57,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.selection.selectable
@@ -64,6 +75,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -99,13 +112,24 @@ fun DashboardScreen(
     onNavigateToMarket: () -> Unit,
     onNavigateToSuggested: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToAddAgent: () -> Unit = {},
     onNavigateToBadges: () -> Unit,
     onNavigateToInterAgentChat: () -> Unit = {},
     onNavigateToTaskBoard: () -> Unit = {},
     onNavigateToProgression: () -> Unit = {},
     onNavigateToPersonaColony: () -> Unit = {},
     onNavigateToActiveAgents: () -> Unit = {},
-    onNavigateToAgentDashboard: () -> Unit = {}
+    onNavigateToAgentDashboard: () -> Unit = {},
+    onNavigateToEvolution: () -> Unit = {},
+    onNavigateToEddeConsole: () -> Unit = {},
+    onNavigateToSmartFinance: () -> Unit = {},
+    onNavigateToCalendarIntel: () -> Unit = {},
+    onNavigateToWebAnalyzer: () -> Unit = {},
+    onNavigateToKnowledgeGraph: () -> Unit = {},
+    onNavigateToAgentBuilder: () -> Unit = {},
+    onNavigateToStudy: () -> Unit = {},
+    onNavigateToSleepOptimizer: () -> Unit = {},
+    onNavigateToPhase5: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var isRefreshing by remember { mutableStateOf(false) }
@@ -116,12 +140,71 @@ fun DashboardScreen(
     val decisions by viewModel.decisions.collectAsState()
     val calendarEvents by viewModel.calendarEvents.collectAsState()
     val predictions by viewModel.predictions.collectAsState()
+    val missionLogs by viewModel.missionStateLogs.collectAsState()
+    val negotiations by viewModel.negotiations.collectAsState()
+    val meshTelemetry by viewModel.meshTelemetry.collectAsState()
+    val knowledgeEdges by viewModel.knowledgeEdges.collectAsState()
+    val customAgents by viewModel.customAgentDefinitions.collectAsState()
+    val subscriptions by viewModel.subscriptions.collectAsState()
+    val sleepRecords by viewModel.sleepRecords.collectAsState()
+    val transactions by viewModel.financeTransactions.collectAsState()
+    
+    val preferences by viewModel.agentPreferencesState.collectAsState()
+    
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            coroutineScope.launch {
+                try {
+                    context.contentResolver.openInputStream(it)?.bufferedReader()?.use { reader ->
+                        val jsonContent = reader.readText()
+                        if (jsonContent.trim().startsWith("[")) {
+                            val jsonArray = org.json.JSONArray(jsonContent)
+                            for (i in 0 until jsonArray.length()) {
+                                val obj = jsonArray.getJSONObject(i)
+                                viewModel.addAgent(
+                                    name = obj.getString("name"),
+                                    type = obj.getString("type"),
+                                    role = obj.getString("role"),
+                                    permissions = obj.optString("permissions", "Basic"),
+                                    traits = obj.optString("traits", ""),
+                                    systemPrompt = obj.optString("systemPrompt", "")
+                                )
+                            }
+                        } else if (jsonContent.trim().startsWith("{")) {
+                            val obj = org.json.JSONObject(jsonContent)
+                            viewModel.addAgent(
+                                name = obj.getString("name"),
+                                type = obj.getString("type"),
+                                role = obj.getString("role"),
+                                permissions = obj.optString("permissions", "Basic"),
+                                traits = obj.optString("traits", ""),
+                                systemPrompt = obj.optString("systemPrompt", "")
+                            )
+                        }
+                        android.widget.Toast.makeText(context, "Agent(s) imported successfully", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(context, "Failed to import agents", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+    val isFocusModeActive = preferences.isFocusModeActive
+    val relationshipNudges by viewModel.relationshipNudges.collectAsState()
+
     
     // Auto prediction trigger on load
     LaunchedEffect(calendarEvents) {
         if (calendarEvents.isNotEmpty()) {
             viewModel.analyzeCalendarEventsWithGemini()
         }
+    }
+
+    // Relationship Nudges trigger on load
+    LaunchedEffect(Unit) {
+        viewModel.fetchRelationshipNudges(context)
     }
     
     // Backup state
@@ -148,9 +231,7 @@ fun DashboardScreen(
 
     val filteredAgents = remember(agents, searchQuery, selectedStatusFilter, selectedRoleFilter, sortBy, subTasksList) {
         var result = agents.filter { agent ->
-            val nameMatch = agent.name.contains(searchQuery, ignoreCase = true)
-            val roleMatch = agent.role.contains(searchQuery, ignoreCase = true) || agent.type.contains(searchQuery, ignoreCase = true)
-            nameMatch || roleMatch
+            agent.name.contains(searchQuery, ignoreCase = true)
         }
         
         if (selectedStatusFilter != "All") {
@@ -175,14 +256,15 @@ fun DashboardScreen(
         }
         
         when (sortBy) {
-            "Name" -> result.sortedBy { it.name.lowercase() }
+            "Name", "name" -> result.sortedBy { it.name.lowercase() }
             "Role" -> result.sortedBy { it.type.lowercase() }
             "Status" -> result.sortedBy { it.status.lowercase() }
+            "last_active" -> result.sortedByDescending { it.lastActiveTimestamp }
             else -> result
         }
     }
 
-    val agentActivityLog = remember(selectedAgentForActivity, decisions, subTasksList) {
+    val agentActivityLog = remember<List<ActivityEntry>>(selectedAgentForActivity, decisions, subTasksList) {
         val agent = selectedAgentForActivity ?: return@remember emptyList<ActivityEntry>()
         val entries = mutableListOf<ActivityEntry>()
         
@@ -266,29 +348,42 @@ fun DashboardScreen(
                     actions = {
                         IconButton(onClick = {
                             if (selectedAgents.isNotEmpty()) {
-                                val hasActive = selectedAgents.any { it.status == "Active" }
-                                viewModel.bulkPauseAgents(selectedAgents.toList(), hasActive)
+                                viewModel.bulkPauseAgents(selectedAgents.toList(), true)
                                 selectedAgents.clear()
                                 isMultiSelectMode = false
                             }
-                        }) {
-                            val hasActive = selectedAgents.any { it.status == "Active" }
-                            Icon(
-                                imageVector = if (hasActive) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                contentDescription = if (hasActive) "Pause Selected" else "Activate Selected"
-                            )
+                        }, modifier = Modifier.testTag("bulk_pause_agents_btn")) {
+                            Icon(Icons.Filled.Pause, contentDescription = "Pause Selected Agents")
                         }
 
                         IconButton(onClick = {
                             if (selectedAgents.isNotEmpty()) {
-                                exportSelectedAgents(context, selectedAgents.toList()) { path, json ->
+                                viewModel.bulkPauseAgents(selectedAgents.toList(), false)
+                                selectedAgents.clear()
+                                isMultiSelectMode = false
+                            }
+                        }, modifier = Modifier.testTag("bulk_resume_agents_btn")) {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = "Resume Selected Agents")
+                        }
+
+                        IconButton(onClick = {
+                            if (selectedAgents.isNotEmpty()) {
+                                com.example.utils.ExportRoomBackupHelper.exportFullRoomBackupToJson(
+                                    context = context,
+                                    agents = selectedAgents.toList(),
+                                    missions = viewModel.missions.value,
+                                    subTasks = subTasksList,
+                                    decisions = decisions,
+                                    missionLogs = missionLogs,
+                                    memories = viewModel.memories.value
+                                ) { path, json ->
                                     exportFilePath = path
                                     exportJsonContent = json
                                     showExportDialog = true
                                 }
                             }
                         }, modifier = Modifier.testTag("bulk_export_json_btn")) {
-                            Icon(Icons.Default.Share, contentDescription = "Export Selected")
+                            Icon(Icons.Default.Share, contentDescription = "Export Full Backup JSON")
                         }
 
                         IconButton(onClick = {
@@ -317,6 +412,29 @@ fun DashboardScreen(
                         containerColor = MaterialTheme.colorScheme.primaryContainer
                     ),
                     actions = {
+                        var showSortMenu by remember { mutableStateOf(false) }
+                        IconButton(onClick = { showSortMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Sort Options")
+                        }
+                        DropdownMenu(
+                            expanded = showSortMenu,
+                            onDismissRequest = { showSortMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Sort by Last Active") },
+                                onClick = {
+                                    sortBy = "last_active"
+                                    showSortMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Sort by Name") },
+                                onClick = {
+                                    sortBy = "name"
+                                    showSortMenu = false
+                                }
+                            )
+                        }
                         Button(
                             onClick = { viewModel.triggerPanic() },
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
@@ -338,12 +456,64 @@ fun DashboardScreen(
             }
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showCreateDialog = true }) {
-                Icon(Icons.Filled.Add, contentDescription = "Add Agent")
+            if (!isFocusModeActive) {
+                var showVoiceDialog by remember { mutableStateOf(false) }
+                if (showVoiceDialog) {
+                    VoiceCommandDialog(
+                        viewModel = viewModel,
+                        onDismiss = { showVoiceDialog = false },
+                        onNavigateToTaskBoard = onNavigateToTaskBoard,
+                        onNavigateToSettings = onNavigateToSettings,
+                        onNavigateToAgentBuilder = onNavigateToAgentBuilder,
+                        onNavigateToSmartFinance = onNavigateToSmartFinance,
+                        onNavigateToSleepOptimizer = onNavigateToSleepOptimizer
+                    )
+                }
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    FloatingActionButton(
+                        onClick = { viewModel.updateFocusModeActive(true) },
+                        containerColor = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.testTag("fab_toggle_focus_mode")
+                    ) {
+                        Icon(Icons.Filled.Psychology, contentDescription = "Głębokie skupienie")
+                    }
+
+                    FloatingActionButton(
+                        onClick = { importLauncher.launch(arrayOf("application/json")) },
+                        containerColor = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.testTag("fab_import_agent")
+                    ) {
+                        Icon(Icons.Filled.FileDownload, contentDescription = "Import Agent")
+                    }
+                    FloatingActionButton(
+                        onClick = { showVoiceDialog = true },
+                        containerColor = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.testTag("fab_voice_commands")
+                    ) {
+                        Icon(Icons.Filled.Mic, contentDescription = "Asystent głosowy")
+                    }
+
+                    FloatingActionButton(
+                        onClick = { showCreateDialog = true },
+                        modifier = Modifier.testTag("fab_add_agent")
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = "Add Agent")
+                    }
+                }
             }
         }
     ) { padding ->
-        PullToRefreshBox(
+        if (isFocusModeActive) {
+            FocusModeSuite(
+                viewModel = viewModel,
+                padding = padding
+            )
+        } else {
+            PullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = {
                 isRefreshing = true
@@ -356,15 +526,15 @@ fun DashboardScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            LazyColumn(
+
+
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 16.dp)
             ) {
-            item(span = { GridItemSpan(2) }) {
+            item {
                 Column(modifier = Modifier.padding(top = 16.dp)) {
                     if (isOffline) {
                         Surface(
@@ -393,6 +563,27 @@ fun DashboardScreen(
                         }
                     }
                     
+                    // 1. SEARCH BAR
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Search agents by name...") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp)
+                            .testTag("search_bar_input"),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
                     Image(
                         painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.img_mesh_hero),
                         contentDescription = "PersonaMesh Hero",
@@ -430,7 +621,7 @@ fun DashboardScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 16.dp),
+                            .padding(bottom = 12.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         Button(onClick = onNavigateToPersonaColony, modifier = Modifier.testTag("nav_to_personas_btn")) {
@@ -445,6 +636,13 @@ fun DashboardScreen(
                         Button(onClick = onNavigateToProgression, modifier = Modifier.testTag("nav_to_progression_btn")) {
                             Text("Unlocks")
                         }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
                         Button(onClick = onNavigateToPrivacy) {
                             Text("Privacy")
                         }
@@ -453,6 +651,311 @@ fun DashboardScreen(
                         }
                         Button(onClick = onNavigateToMarket) {
                             Text("Market")
+                        }
+                        Button(
+                            onClick = onNavigateToEvolution, 
+                            modifier = Modifier.testTag("nav_to_evolution_btn"),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                        ) {
+                            Text("Evolution")
+                        }
+                        Button(
+                            onClick = onNavigateToEddeConsole, 
+                            modifier = Modifier.testTag("nav_to_edde_console_btn"),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                        ) {
+                            Text("EDDE CLI")
+                        }
+                    }
+
+                    // FAZA 2: HIGH (Główna Wartość Dodana) buttons
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        Button(
+                            onClick = onNavigateToSmartFinance,
+                            modifier = Modifier.testTag("nav_to_finance_btn"),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Text("Finance")
+                        }
+                        Button(
+                            onClick = onNavigateToCalendarIntel,
+                            modifier = Modifier.testTag("nav_to_calendar_btn"),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                        ) {
+                            Text("Calendar")
+                        }
+                        Button(
+                            onClick = onNavigateToWebAnalyzer,
+                            modifier = Modifier.testTag("nav_to_analyzer_btn"),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                        ) {
+                            Text("Scraper")
+                        }
+                        Button(
+                            onClick = onNavigateToKnowledgeGraph,
+                            modifier = Modifier.testTag("nav_to_graph_btn"),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Graph")
+                        }
+                    }
+
+                    // FAZA 3: MEDIUM (Inteligentne Rozszerzenia) buttons
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        Button(
+                            onClick = onNavigateToAgentBuilder,
+                            modifier = Modifier.testTag("nav_to_builder_btn"),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Text("Agent Builder")
+                        }
+                        Button(
+                            onClick = onNavigateToStudy,
+                            modifier = Modifier.testTag("nav_to_study_btn"),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                        ) {
+                            Text("Study Repeater")
+                        }
+                        Button(
+                            onClick = onNavigateToSleepOptimizer,
+                            modifier = Modifier.testTag("nav_to_sleep_btn"),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                        ) {
+                            Text("Sleep Optimizer")
+                        }
+                    }
+
+                    // FAZA 5: EVOLUTION
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        Button(
+                            onClick = onNavigateToPhase5,
+                            modifier = Modifier.testTag("nav_to_phase5_btn").fillMaxWidth(0.9f),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
+                        ) {
+                            Icon(Icons.Filled.Psychology, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                            Text("Phase 5: Evolution Engine (On-Device LLM & Sandbox)", fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                com.example.utils.ExportRoomBackupHelper.exportFullRoomBackupToJson(
+                                    context = context,
+                                    agents = agents,
+                                    missions = viewModel.missions.value,
+                                    subTasks = subTasksList,
+                                    decisions = decisions,
+                                    missionLogs = missionLogs,
+                                    memories = viewModel.memories.value,
+                                    negotiations = negotiations,
+                                    meshTelemetry = meshTelemetry,
+                                    knowledgeEdges = knowledgeEdges
+                                ) { path, json ->
+
+                                    exportFilePath = path
+                                    exportJsonContent = json
+                                    showExportDialog = true
+                                }
+                            },
+                            modifier = Modifier.testTag("export_backup_json_btn")
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Export Room Backup")
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                val topAgent = agents.firstOrNull()?.name ?: "Alpha Agent"
+                                com.example.utils.NotificationHelper.sendHighPriorityMissionNotification(
+                                    context = context,
+                                    missionId = (100..999).random(),
+                                    agentName = topAgent,
+                                    missionGoal = "Urgent Colony Security & Data Backup Verification"
+                                )
+                                android.widget.Toast.makeText(context, "High-priority notification sent!", android.widget.Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.testTag("trigger_mission_notification_btn")
+                        ) {
+                            Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Test Mission Alert")
+                        }
+                    }
+
+                    // Cross-Agent Intelligence Aggregation Card
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 20.dp)
+                            .testTag("cross_agent_intelligence_card"),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Psychology,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Cross-Agent Intelligence Hub",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f))
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Stats Grid or Rows
+                            val totalSubCost = subscriptions.sumOf { it.amount }
+                            val activeSubsCount = subscriptions.count { !it.isCancelled }
+                            val avgRecovery = if (sleepRecords.isNotEmpty()) sleepRecords.map { it.recoveryScore }.average().toInt() else 0
+                            val customAgentsCount = customAgents.size
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                // Column 1: Financial Security
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "FINANCIAL SECURITY",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Monthly Subs: $${String.format(Locale.US, "%.2f", totalSubCost)}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "$activeSubsCount Active Services",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                // Column 2: Health & Recovery
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "HEALTH & RECOVERY",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Avg Recovery: $avgRecovery%",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = when {
+                                            avgRecovery >= 80 -> MaterialTheme.colorScheme.primary
+                                            avgRecovery >= 50 -> MaterialTheme.colorScheme.secondary
+                                            else -> MaterialTheme.colorScheme.error
+                                        }
+                                    )
+                                    val sleepStatus = if (avgRecovery >= 75) "Optimal Sleep" else "Needs Recovery"
+                                    Text(
+                                        text = sleepStatus,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                // Column 3: Autonomous Agents
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "AUTONOMOUS BUILDER",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "$customAgentsCount Custom Models",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "Active and persistent",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                // Column 4: System Audit Status
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "SYSTEM INTEGRITY AUDIT",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = Color(0xFF4CAF50),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "SECURE (100%)",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF4CAF50)
+                                        )
+                                    }
+                                    Text(
+                                        text = "EDDE-14 loop active",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -487,6 +990,66 @@ fun DashboardScreen(
                             }
                         }
                     }
+
+                    AgentActivityHeatmapWidget(
+                        subTasks = subTasksList,
+                        decisions = decisions,
+                        missionLogs = missionLogs,
+                        memories = viewModel.memories.value,
+                        modifier = Modifier.padding(bottom = 20.dp)
+                    )
+
+                    AgentStatusNotesWidget(
+                        agents = agents,
+                        viewModel = viewModel,
+                        modifier = Modifier.padding(bottom = 20.dp)
+                    )
+
+                    RelationshipNudgesWidget(
+                        nudges = relationshipNudges,
+                        viewModel = viewModel,
+                        modifier = Modifier.padding(bottom = 20.dp)
+                    )
+
+                    AgentNegotiationConsoleWidget(
+                        negotiations = negotiations,
+                        agents = agents,
+                        viewModel = viewModel,
+                        modifier = Modifier.padding(bottom = 20.dp)
+                    )
+
+                    AgentConsensusAnalyticsWidget(
+                        negotiations = negotiations,
+                        agents = agents,
+                        viewModel = viewModel,
+                        modifier = Modifier.padding(bottom = 20.dp)
+                    )
+
+                    AgentMeshTelemetryWidget(
+                        telemetryList = meshTelemetry,
+                        agents = agents,
+                        viewModel = viewModel,
+                        modifier = Modifier.padding(bottom = 20.dp)
+                    )
+
+                    AgentKnowledgeGraphWidget(
+                        knowledgeEdges = knowledgeEdges,
+                        agents = agents,
+                        viewModel = viewModel,
+                        modifier = Modifier.padding(bottom = 20.dp)
+                    )
+
+
+                    TaskCompletionRateWidget(
+                        subTasksList = subTasksList,
+                        missionLogs = missionLogs,
+                        modifier = Modifier.padding(bottom = 20.dp)
+                    )
+
+                    CategoryColorSchemePickerWidget(
+                        viewModel = viewModel,
+                        modifier = Modifier.padding(bottom = 20.dp)
+                    )
                     
                     Row(
                         modifier = Modifier
@@ -523,27 +1086,6 @@ fun DashboardScreen(
                             )
                         }
                     }
-
-                    // 1. SEARCH BAR
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        placeholder = { Text("Search agents by name or role...") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear search")
-                                }
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 12.dp)
-                            .testTag("search_bar_input"),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
-                    )
 
                     // 2. FILTER CHIPS (Status & Assigned Role) & SORT OPTIONS
                     Column(
@@ -654,41 +1196,136 @@ fun DashboardScreen(
                 }
             }
 
-            items(filteredAgents, key = { it.id }) { agent ->
-                val isWorking = subTasksList.any { task ->
-                    task.assignedAgent.equals(agent.name, ignoreCase = true) && task.status == "In Progress"
+            if (filteredAgents.isEmpty()) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 64.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "No Agents",
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "No agents found.",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Add an agent to get started.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Button(onClick = onNavigateToAddAgent) {
+                            Icon(Icons.Default.Add, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Create Agent")
+                        }
+                    }
                 }
-                val isSelected = selectedAgents.contains(agent)
-                AgentCard(
-                    agent = agent,
-                    isWorking = isWorking,
-                    isSelectionMode = isMultiSelectMode,
-                    isSelected = isSelected,
-                    prediction = predictions[agent.id],
-                    subTasks = subTasksList,
-                    onSelectToggle = {
-                        if (isSelected) {
-                            selectedAgents.remove(agent)
-                        } else {
-                            selectedAgents.add(agent)
-                        }
-                    },
-                    onTap = {
-                        if (isMultiSelectMode) {
-                            if (isSelected) {
-                                selectedAgents.remove(agent)
+            } else {
+                items(filteredAgents, key = { it.id }) { agent ->
+                    val isWorking = subTasksList.any { task ->
+                        task.assignedAgent.equals(agent.name, ignoreCase = true) && task.status == "In Progress"
+                    }
+                    val isSelected = selectedAgents.contains(agent)
+                    val catHex = viewModel.getCategoryColorHex(agent.type)
+                    val haptic = LocalHapticFeedback.current
+                    
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { dismissValue ->
+                            if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel.deleteAgent(agent.id)
+                                true
                             } else {
-                                selectedAgents.add(agent)
+                                false
                             }
-                        } else {
-                            selectedAgentForActivity = agent
                         }
-                    },
-                    onPauseToggle = { viewModel.toggleAgentStatus(agent) },
-                    onDelete = { viewModel.deleteAgent(agent.id) }
-                )
+                    )
+                    
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        backgroundContent = {
+                            val color = when (dismissState.dismissDirection) {
+                                SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer
+                                else -> androidx.compose.ui.graphics.Color.Transparent
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(vertical = 8.dp)
+                                    .background(color, RoundedCornerShape(16.dp))
+                                    .padding(horizontal = 20.dp),
+                                contentAlignment = Alignment.CenterEnd
+                            ) {
+                                if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete Agent",
+                                        tint = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                            }
+                        },
+                        enableDismissFromStartToEnd = false
+                    ) {
+                        AgentCard(
+                            agent = agent,
+                            isWorking = isWorking,
+                            isSelectionMode = isMultiSelectMode,
+                            isSelected = isSelected,
+                            categoryColorHex = catHex,
+                            prediction = predictions[agent.id],
+                            subTasks = subTasksList,
+                            onSelectToggle = {
+                                if (isSelected) {
+                                    selectedAgents.remove(agent)
+                                } else {
+                                    selectedAgents.add(agent)
+                                }
+                            },
+                            onTap = {
+                                if (isMultiSelectMode) {
+                                    if (isSelected) {
+                                        selectedAgents.remove(agent)
+                                    } else {
+                                        selectedAgents.add(agent)
+                                    }
+                                } else {
+                                    selectedAgentForActivity = agent
+                                }
+                            },
+                            onPauseToggle = { viewModel.toggleAgentStatus(agent) },
+                            onDelete = { viewModel.deleteAgent(agent.id) },
+                            onExport = {
+                                exportSelectedAgents(context, listOf(agent)) { path, json ->
+                                    exportFilePath = path
+                                    exportJsonContent = json
+                                    showExportDialog = true
+                                }
+                            }
+                        )
+                    }
+                }
             }
         }
+        }
+        
+        if (!preferences.hasSeenWalkthrough) {
+            WalkthroughOverlay(
+                onDismiss = {
+                    viewModel.updateHasSeenWalkthrough(true)
+                }
+            )
         }
         
         if (showExportDialog) {
@@ -752,12 +1389,9 @@ fun DashboardScreen(
         }
 
         if (showCreateDialog) {
-            CreateAgentDialog(
-                onDismiss = { showCreateDialog = false },
-                onCreate = { name, type, role, permissions, traits, systemPrompt ->
-                    viewModel.addAgent(name, type, role, permissions, traits = traits, systemPrompt = systemPrompt)
-                    showCreateDialog = false
-                }
+            MultiStepCreateAgentDialog(
+                viewModel = viewModel,
+                onDismiss = { showCreateDialog = false }
             )
         }
 
@@ -1274,428 +1908,8 @@ fun DashboardScreen(
 }
 }
 
-@Composable
-fun CreateAgentDialog(
-    onDismiss: () -> Unit,
-    onCreate: (String, String, String, String, String, String) -> Unit
-) {
-    var name by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf("") }
-    var role by remember { mutableStateOf("") }
-    var permissions by remember { mutableStateOf("") }
-    var traits by remember { mutableStateOf("") }
-    var systemPrompt by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Create New Agent") },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.verticalScroll(rememberScrollState())
-            ) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = type,
-                    onValueChange = { type = it },
-                    label = { Text("Type (e.g. Finance, Health)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = role,
-                    onValueChange = { role = it },
-                    label = { Text("Role Description") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = permissions,
-                    onValueChange = { permissions = it },
-                    label = { Text("Permissions") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = traits,
-                    onValueChange = { traits = it },
-                    label = { Text("Traits (e.g., Analytical, Cautious)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = systemPrompt,
-                    onValueChange = { systemPrompt = it },
-                    label = { Text("System Prompt (Instructions)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    maxLines = 4
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (name.isNotBlank() && type.isNotBlank()) {
-                        onCreate(name, type, role, permissions, traits, systemPrompt)
-                    }
-                }
-            ) {
-                Text("Create")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
 }
 
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun AgentCard(
-    agent: Agent,
-    isWorking: Boolean,
-    isSelectionMode: Boolean,
-    isSelected: Boolean,
-    prediction: ColonyViewModel.AgentPrediction?,
-    subTasks: List<SubTask> = emptyList(),
-    onSelectToggle: () -> Unit,
-    onTap: () -> Unit,
-    onPauseToggle: () -> Unit,
-    onDelete: () -> Unit
-) {
-    var showMenu by remember { mutableStateOf(false) }
-
-    val mood = remember(agent, subTasks) {
-        com.example.data.calculateAgentMood(agent, subTasks)
-    }
-
-    val (statusText, dotColor) = when {
-        agent.status == "Resting" -> "Resting" to Color(0xFFFF9800)
-        agent.status != "Active" -> "Idle" to MaterialTheme.colorScheme.outline
-        isWorking -> "Working" to MaterialTheme.colorScheme.tertiary
-        else -> "Active" to Color(0xFF4CAF50)
-    }
-
-    // Pulse animation states
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 2f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1400, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "scale"
-    )
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.6f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1400, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "alpha"
-    )
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = { onTap() },
-                onLongClick = { onSelectToggle() }
-            )
-            .testTag("agent_card_${agent.id}"),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else if (agent.status == "Paused" || agent.status == "Halted") {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            } else if (agent.status == "Resting") {
-                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.2f)
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            }
-        ),
-        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
-    ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            if (isSelectionMode) {
-                Checkbox(
-                    checked = isSelected,
-                    onCheckedChange = { onSelectToggle() },
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(8.dp)
-                        .testTag("agent_checkbox_${agent.id}")
-                )
-            }
-
-            if (!isSelectionMode) {
-                Row(
-                    modifier = Modifier.align(Alignment.TopEnd).padding(end = 4.dp, top = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Switch(
-                        checked = agent.status == "Active" || agent.status == "Working",
-                        onCheckedChange = { onPauseToggle() },
-                        modifier = Modifier.testTag("agent_status_toggle_${agent.id}")
-                    )
-                    IconButton(
-                        onClick = { showMenu = true },
-                        modifier = Modifier.testTag("agent_menu_btn_${agent.id}")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = "Manage Agent",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-            
-            DropdownMenu(
-                expanded = showMenu,
-                onDismissRequest = { showMenu = false }
-            ) {
-                DropdownMenuItem(
-                    text = { Text(if (agent.status == "Active") "Pause Agent" else "Activate Agent") },
-                    onClick = {
-                        onPauseToggle()
-                        showMenu = false
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = if (agent.status == "Active") Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = null
-                        )
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("Remove Agent") },
-                    onClick = {
-                        onDelete()
-                        showMenu = false
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
-                )
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 28.dp, bottom = 16.dp, start = 16.dp, end = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (agent.status != "Active") {
-                                    MaterialTheme.colorScheme.outline
-                                } else {
-                                    MaterialTheme.colorScheme.primary
-                                }
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = agent.name.firstOrNull()?.toString() ?: "?",
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
-                        )
-                    }
-                    
-                    // Status Dot with pulse ring behind it if Working
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .align(Alignment.BottomEnd)
-                    ) {
-                        if (statusText == "Working") {
-                            Box(
-                                modifier = Modifier
-                                    .size(12.dp)
-                                    .align(Alignment.Center)
-                                    .graphicsLayer {
-                                        scaleX = pulseScale
-                                        scaleY = pulseScale
-                                        alpha = pulseAlpha
-                                    }
-                                    .clip(CircleShape)
-                                    .background(dotColor)
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(12.dp)
-                                .align(Alignment.Center)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surface)
-                                .padding(1.dp)
-                                .clip(CircleShape)
-                                .background(dotColor)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "${agent.name} ${mood.emoji}",
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (agent.status == "Paused" || agent.status == "Halted") {
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(
-                        color = if (agent.status == "Paused" || agent.status == "Halted") {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.secondaryContainer
-                        },
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            text = agent.type,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (agent.status == "Paused" || agent.status == "Halted") {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                            } else {
-                                MaterialTheme.colorScheme.onSecondaryContainer
-                            },
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                        )
-                    }
-
-                    Surface(
-                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            text = "${mood.emoji} ${mood.moodTitle}",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(dotColor)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = statusText,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = dotColor
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Permissions: ${agent.permissions}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                val lastTask = subTasks.filter { it.assignedAgent.equals(agent.name, ignoreCase = true) }.maxByOrNull { it.timestamp }
-                if (lastTask != null) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(8.dp)) {
-                            Text(
-                                text = "Last Activity:",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = lastTask.description,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-                // Predicted status indicator badge
-                prediction?.let { pred ->
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth().testTag("prediction_badge_${agent.id}")
-                    ) {
-                        Column(modifier = Modifier.padding(6.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.AutoAwesome,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(12.dp),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Predicted: ${pred.suggestedStatus}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = pred.suggestionReason,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 9.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                lineHeight = 11.sp
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 data class ActivityEntry(
     val title: String,
@@ -1752,3 +1966,7 @@ fun exportSelectedAgents(
         android.widget.Toast.makeText(context, "Export failed: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
     }
 }
+
+
+
+

@@ -139,4 +139,54 @@ open class BaseAgentViewModel(application: Application) : AndroidViewModel(appli
             preferencesRepository.updateOpenRouterSelectedModel(model)
         }
     }
+
+    fun updateGeminiApiKey(key: String) {
+        viewModelScope.launch {
+            preferencesRepository.updateGeminiApiKey(key)
+        }
+    }
+
+    fun updateGeminiSelectedModel(model: String) {
+        viewModelScope.launch {
+            preferencesRepository.updateGeminiSelectedModel(model)
+        }
+    }
+
+    fun updateThemeMode(mode: String) {
+        viewModelScope.launch {
+            preferencesRepository.updateThemeMode(mode)
+        }
+    }
+
+    fun updateFocusModeActive(active: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.updateFocusModeActive(active)
+            try {
+                val context = getApplication<android.app.Application>()
+                val notificationManager = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+                if (notificationManager != null) {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                        if (notificationManager.isNotificationPolicyAccessGranted) {
+                            val filter = if (active) {
+                                android.app.NotificationManager.INTERRUPTION_FILTER_NONE
+                            } else {
+                                android.app.NotificationManager.INTERRUPTION_FILTER_ALL
+                            }
+                            notificationManager.setInterruptionFilter(filter)
+                        } else {
+                            android.util.Log.d("BaseAgentViewModel", "ACCESS_NOTIFICATION_POLICY is not granted. Cannot automatically toggle DND.")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("BaseAgentViewModel", "Error toggling system DND filter", e)
+            }
+        }
+    }
+
+    fun updateHasSeenWalkthrough(seen: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.updateHasSeenWalkthrough(seen)
+        }
+    }
 }

@@ -1,0 +1,92 @@
+{
+  "audit_date": "2026-07-26",
+  "verdict": "BLOCKED",
+  "classification": "Functional Android prototype; not production-ready and not a fully autonomous multi-agent runtime",
+  "overall_production_score": 3.5,
+  "prototype_score": 6.5,
+  "artifacts": {
+    "source_zip": "persona-android-system (4).zip",
+    "apk_zip": "persona-colony-v4.zip",
+    "apk_sha256": "767f4f56a6c320d80f07555adc69a31db38a117f59c28b1af810ccb24ba353e5",
+    "apk_certificate_sha256": "e04a68b5ee8fe3a139bc0e4f9c04a141c9768a3c59c1d3aba5ab957949baa5c4",
+    "apk_signer": "Android Debug",
+    "gradle_wrapper": "corrupt"
+  },
+  "p0": [
+    {
+      "id": "P0-1",
+      "title": "Fake-success in ExecutionEngine",
+      "evidence": "ExecutionEngine.kt:51-84",
+      "status": "confirmed"
+    },
+    {
+      "id": "P0-2",
+      "title": "Corrupted Gradle wrapper prevents reproducible build and tests",
+      "evidence": "gradle/wrapper/gradle-wrapper.jar",
+      "status": "confirmed"
+    },
+    {
+      "id": "P0-3",
+      "title": "APK debug-signed; release may fall back to debug signing",
+      "evidence": "APK certificate and app/build.gradle.kts",
+      "status": "confirmed"
+    },
+    {
+      "id": "P0-4",
+      "title": "API keys stored as plain DataStore strings",
+      "evidence": "AgentPreferencesRepository.kt:42-45,86-106",
+      "status": "confirmed"
+    },
+    {
+      "id": "P0-5",
+      "title": "Autonomy and data access preferences are not enforced",
+      "evidence": "No non-UI/runtime usages found",
+      "status": "confirmed"
+    },
+    {
+      "id": "P0-6",
+      "title": "Panic mode updates database statuses but does not stop runtime work",
+      "evidence": "PanicTileService.kt, ColonyDao.kt, ColonyViewModel.kt",
+      "status": "confirmed"
+    },
+    {
+      "id": "P0-7",
+      "title": "Production database can destructively migrate",
+      "evidence": "AppDatabase.kt:272-273",
+      "status": "confirmed"
+    },
+    {
+      "id": "P0-8",
+      "title": "Long-running dataSync foreground service conflicts with modern Android limits",
+      "evidence": "AgentRestSchedulerService.kt:27-127",
+      "status": "confirmed"
+    }
+  ],
+  "reality_matrix": {
+    "compose_ui": "REAL",
+    "room_database": "REAL",
+    "gemini_api": "REAL",
+    "openrouter_api": "REAL",
+    "calendar_sync": "FAKE_SUCCESS",
+    "rule_worker_enqueue_from_execution_engine": "FAKE_SUCCESS",
+    "local_gemma": "SIMULATED",
+    "smart_home": "MOCK",
+    "webhook": "PARTIAL_MISLEADING",
+    "sandbox": "SIMULATION",
+    "council_chat": "PERSONA_SIMULATION",
+    "mesh_telemetry": "SIMULATION",
+    "evolution_heuristics": "SIMULATION",
+    "panic_mode": "PARTIAL",
+    "security_preferences": "UI_ONLY"
+  },
+  "closure_gate": [
+    "Reproducible clean build and test suite",
+    "Release signing with non-debug key",
+    "Real effect evidence for every EXECUTED result",
+    "Runtime enforcement of user policies",
+    "Secure key storage and explicit backup exclusions",
+    "Non-destructive verified database migrations",
+    "Modern compliant background work",
+    "Explicit provenance labels for simulated data"
+  ]
+}

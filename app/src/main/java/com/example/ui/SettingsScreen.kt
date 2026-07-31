@@ -37,6 +37,7 @@ import com.example.viewmodel.ColonyViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +56,9 @@ fun SettingsScreen(
     var openRouterKeyInput by remember(agentPrefs.openRouterApiKey) { mutableStateOf(agentPrefs.openRouterApiKey) }
     var keyVisible by remember { mutableStateOf(false) }
     var selectedModelFilter by remember { mutableStateOf("") }
+    
+    var geminiKeyInput by remember(agentPrefs.geminiApiKey) { mutableStateOf(agentPrefs.geminiApiKey) }
+    var geminiKeyVisible by remember { mutableStateOf(false) }
     
     // Preferences state
     val prefs = remember { context.getSharedPreferences("colony_prefs", android.content.Context.MODE_PRIVATE) }
@@ -192,139 +196,291 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // OpenRouter API Key Configuration
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "OpenRouter API Key",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    OutlinedTextField(
-                        value = openRouterKeyInput,
-                        onValueChange = { openRouterKeyInput = it },
-                        label = { Text("sk-or-v1-...") },
-                        placeholder = { Text("Enter your OpenRouter API Key") },
-                        modifier = Modifier.fillMaxWidth().testTag("openrouter_key_input"),
-                        singleLine = true,
-                        trailingIcon = {
-                            IconButton(onClick = { keyVisible = !keyVisible }) {
-                                Icon(
-                                    imageVector = if (keyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = "Toggle key visibility"
-                                )
-                            }
-                        },
-                        visualTransformation = if (keyVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation()
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        Button(
-                            onClick = {
-                                viewModel.updateOpenRouterApiKey(openRouterKeyInput.trim())
-                                android.widget.Toast.makeText(context, "OpenRouter API Key saved!", android.widget.Toast.LENGTH_SHORT).show()
-                            },
-                            modifier = Modifier.testTag("save_openrouter_key_btn")
-                        ) {
-                            Text("Save OpenRouter Key")
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    HorizontalDivider()
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Free Models Selector
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
+                    if (agentPrefs.aiProvider == "openrouter") {
+                        // OpenRouter API Key Configuration
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "OpenRouter Free Models",
+                                text = "OpenRouter API Key",
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleSmall
                             )
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        OutlinedTextField(
+                            value = openRouterKeyInput,
+                            onValueChange = { openRouterKeyInput = it },
+                            label = { Text("sk-or-v1-...") },
+                            placeholder = { Text("Enter your OpenRouter API Key") },
+                            modifier = Modifier.fillMaxWidth().testTag("openrouter_key_input"),
+                            singleLine = true,
+                            trailingIcon = {
+                                IconButton(onClick = { keyVisible = !keyVisible }) {
+                                    Icon(
+                                        imageVector = if (keyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = "Toggle key visibility"
+                                    )
+                                }
+                            },
+                            visualTransformation = if (keyVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            Button(
+                                onClick = {
+                                    viewModel.updateOpenRouterApiKey(openRouterKeyInput.trim())
+                                    android.widget.Toast.makeText(context, "OpenRouter API Key saved!", android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.testTag("save_openrouter_key_btn")
+                            ) {
+                                Text("Save OpenRouter Key")
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        HorizontalDivider()
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Free Models Selector
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "OpenRouter Free Models",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Text(
+                                    text = "${openRouterModels.size} free models available",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            IconButton(
+                                onClick = { chatViewModel.fetchOpenRouterFreeModels() },
+                                modifier = Modifier.testTag("refresh_openrouter_models_btn")
+                            ) {
+                                if (isLoadingModels) {
+                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Default.Refresh, contentDescription = "Refresh Models")
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedTextField(
+                            value = selectedModelFilter,
+                            onValueChange = { selectedModelFilter = it },
+                            label = { Text("Filter free models...") },
+                            modifier = Modifier.fillMaxWidth().testTag("filter_models_input"),
+                            singleLine = true
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        val filteredModels = remember(openRouterModels, selectedModelFilter) {
+                            if (selectedModelFilter.isBlank()) {
+                                openRouterModels
+                            } else {
+                                openRouterModels.filter {
+                                    it.id.contains(selectedModelFilter, ignoreCase = true) ||
+                                    (it.name?.contains(selectedModelFilter, ignoreCase = true) == true)
+                                }
+                            }
+                        }
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp)
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                if (filteredModels.isEmpty()) {
+                                    Text(
+                                        text = "No free models match filter",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.padding(12.dp)
+                                    )
+                                } else {
+                                    filteredModels.forEach { model ->
+                                        val isSelected = agentPrefs.openRouterSelectedModel == model.id
+                                        Surface(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    viewModel.updateOpenRouterSelectedModel(model.id)
+                                                },
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(10.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = model.name ?: model.id,
+                                                        fontWeight = FontWeight.Bold,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                    Text(
+                                                        text = model.id,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.secondary
+                                                    )
+                                                    if (model.context_length != null) {
+                                                        Text(
+                                                            text = "Context: ${model.context_length / 1024}k tokens",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = MaterialTheme.colorScheme.outline
+                                                        )
+                                                    }
+                                                }
+
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = MaterialTheme.colorScheme.tertiaryContainer
+                                                ) {
+                                                    Text(
+                                                        text = "FREE",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Google Gemini API Key Configuration
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "${openRouterModels.size} free models available",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = "Google Gemini API Key",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleSmall
                             )
                         }
 
-                        IconButton(
-                            onClick = { chatViewModel.fetchOpenRouterFreeModels() },
-                            modifier = Modifier.testTag("refresh_openrouter_models_btn")
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        OutlinedTextField(
+                            value = geminiKeyInput,
+                            onValueChange = { geminiKeyInput = it },
+                            label = { Text("AIzaSy...") },
+                            placeholder = { Text("Wprowadź swój klucz Gemini API") },
+                            modifier = Modifier.fillMaxWidth().testTag("gemini_key_input"),
+                            singleLine = true,
+                            trailingIcon = {
+                                IconButton(onClick = { geminiKeyVisible = !geminiKeyVisible }) {
+                                    Icon(
+                                        imageVector = if (geminiKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = "Toggle key visibility"
+                                    )
+                                }
+                            },
+                            visualTransformation = if (geminiKeyVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation()
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Pozostaw puste, aby korzystać z klucza systemowego w BuildConfig.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
                         ) {
-                            if (isLoadingModels) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            } else {
-                                Icon(Icons.Default.Refresh, contentDescription = "Refresh Models")
+                            Button(
+                                onClick = {
+                                    viewModel.updateGeminiApiKey(geminiKeyInput.trim())
+                                    android.widget.Toast.makeText(context, "Klucz Gemini API zapisany!", android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.testTag("save_gemini_key_btn")
+                            ) {
+                                Text("Zapisz klucz Gemini")
                             }
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                    OutlinedTextField(
-                        value = selectedModelFilter,
-                        onValueChange = { selectedModelFilter = it },
-                        label = { Text("Filter free models...") },
-                        modifier = Modifier.fillMaxWidth().testTag("filter_models_input"),
-                        singleLine = true
-                    )
+                        HorizontalDivider()
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                    val filteredModels = remember(openRouterModels, selectedModelFilter) {
-                        if (selectedModelFilter.isBlank()) {
-                            openRouterModels
-                        } else {
-                            openRouterModels.filter {
-                                it.id.contains(selectedModelFilter, ignoreCase = true) ||
-                                (it.name?.contains(selectedModelFilter, ignoreCase = true) == true)
-                            }
-                        }
-                    }
+                        // Gemini Model Selection
+                        Text(
+                            text = "Wybór Modelu Google Gemini",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = "Wybierz model dostosowany do Twoich potrzeb:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
 
-                    Card(
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(8.dp)
-                                .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        val geminiModelsList = listOf(
+                            Pair("gemini-3.5-flash", "Google Gemini 3.5 Flash (Szybki i zoptymalizowany)"),
+                            Pair("gemini-3.1-pro-preview", "Google Gemini 3.1 Pro Preview (Zaawansowane wnioskowanie)"),
+                            Pair("gemini-3.1-flash-lite-preview", "Google Gemini 3.1 Flash Lite (Lekki i szybki)"),
+                            Pair("gemini-2.5-flash-image", "Google Gemini 2.5 Flash Image (Multimodalny / Grafika)"),
+                            Pair("gemini-3.1-flash-image-preview", "Google Gemini 3.1 Flash Image Preview (Wysoka jakość multimodalna)")
+                        )
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                         ) {
-                            if (filteredModels.isEmpty()) {
-                                Text(
-                                    text = "No free models match filter",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.padding(12.dp)
-                                )
-                            } else {
-                                filteredModels.forEach { model ->
-                                    val isSelected = agentPrefs.openRouterSelectedModel == model.id
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp)
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                geminiModelsList.forEach { (modelId, modelName) ->
+                                    val isSelected = agentPrefs.geminiSelectedModel == modelId
                                     Surface(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clickable {
-                                                viewModel.updateOpenRouterSelectedModel(model.id)
+                                                viewModel.updateGeminiSelectedModel(modelId)
                                             },
                                         shape = RoundedCornerShape(8.dp),
                                         color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -337,35 +493,22 @@ fun SettingsScreen(
                                         ) {
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(
-                                                    text = model.name ?: model.id,
+                                                    text = modelName,
                                                     fontWeight = FontWeight.Bold,
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
                                                 )
                                                 Text(
-                                                    text = model.id,
+                                                    text = modelId,
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.secondary
                                                 )
-                                                if (model.context_length != null) {
-                                                    Text(
-                                                        text = "Context: ${model.context_length / 1024}k tokens",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.outline
-                                                    )
-                                                }
                                             }
-
-                                            Surface(
-                                                shape = RoundedCornerShape(6.dp),
-                                                color = MaterialTheme.colorScheme.tertiaryContainer
-                                            ) {
-                                                Text(
-                                                    text = "FREE",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            if (isSelected) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = "Selected",
+                                                    tint = MaterialTheme.colorScheme.primary
                                                 )
                                             }
                                         }
@@ -401,7 +544,11 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (isApiKeyConfigured) "Gemini API: Connected" else "Gemini API Key Missing",
+                                text = if (isApiKeyConfigured) {
+                                    if (agentPrefs.aiProvider == "openrouter") "OpenRouter API: Connected" else "Gemini API: Connected"
+                                } else {
+                                    if (agentPrefs.aiProvider == "openrouter") "OpenRouter API Key Missing" else "Gemini API Key Missing"
+                                },
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleMedium,
                                 color = if (isApiKeyConfigured) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
@@ -421,10 +568,19 @@ fun SettingsScreen(
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = if (isApiKeyConfigured)
-                            "• Dev-Only Mode: Klucz pobierany bezpośrednio z BuildConfig / .env. Na potrzeby prototypu zapytań lokalnych.\n• Przygotowanie pod Produkcję: Docelowa architektonicznie migracja do Firebase AI & App Check proxy, aby uniknąć dystrybucji niezaszyfrowanych kluczy API na urządzeniach klienckich."
-                        else
-                            "GEMINI_API_KEY nie jest skonfigurowany w pliku .env. Model AI wymaga aktywnego klucza.",
+                        text = if (isApiKeyConfigured) {
+                            if (agentPrefs.aiProvider == "openrouter") {
+                                "• Tryb OpenRouter: Zapytania są kierowane do OpenRouter przy użyciu klucza.\n• Wybrany Model: ${agentPrefs.openRouterSelectedModel}"
+                            } else {
+                                "• Dev-Only Mode: Klucz pobierany bezpośrednio z BuildConfig / .env. Na potrzeby prototypu zapytań lokalnych.\n• Przygotowanie pod Produkcję: Docelowa architektonicznie migracja do Firebase AI & App Check proxy, aby uniknąć dystrybucji niezaszyfrowanych kluczy API na urządzeniach klienckich."
+                            }
+                        } else {
+                            if (agentPrefs.aiProvider == "openrouter") {
+                                "Klucz OpenRouter API nie jest skonfigurowany w ustawieniach. Podaj klucz powyżej i zapisz."
+                            } else {
+                                "GEMINI_API_KEY nie jest skonfigurowany w pliku .env. Model AI wymaga aktywnego klucza."
+                            }
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isApiKeyConfigured) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
                     )
@@ -435,6 +591,396 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error
                         )
+                    }
+                }
+            }
+
+            // 1. API CONNECTION PROBER & LATENCY TESTER CARD
+            var isProbing by remember { mutableStateOf(false) }
+            var probeResult by remember { mutableStateOf<String?>(null) }
+            val coroutineScope = rememberCoroutineScope()
+
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("api_prober_card"),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Diagnostyka & Opóźnienie API",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Wyślij szybkie zapytanie testowe (ping) do aktywnego dostawcy chmurowego, aby zweryfikować dostępność sieciową oraz zmierzyć czas odpowiedzi.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Button(
+                            onClick = {
+                                isProbing = true
+                                probeResult = null
+                                coroutineScope.launch {
+                                    val startTime = System.currentTimeMillis()
+                                    try {
+                                        val res = com.example.network.AILlmClient.generateContent(
+                                            context,
+                                            prompt = "Hello. Respond in exactly one word: 'OK'."
+                                        )
+                                        val duration = System.currentTimeMillis() - startTime
+                                        if (res.startsWith("Error") || res.contains("Connection Error") || res.contains("Error")) {
+                                            probeResult = "BŁĄD: $res"
+                                        } else {
+                                            probeResult = "POŁĄCZONO: ${duration}ms (Model: ${if (agentPrefs.aiProvider == "openrouter") agentPrefs.openRouterSelectedModel.substringAfterLast("/") else agentPrefs.geminiSelectedModel})"
+                                        }
+                                    } catch (e: Exception) {
+                                        probeResult = "BŁĄD: ${e.localizedMessage ?: e.message}"
+                                    } finally {
+                                        isProbing = false
+                                    }
+                                }
+                            },
+                            enabled = !isProbing,
+                            modifier = Modifier.testTag("api_probe_button")
+                        ) {
+                            if (isProbing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Testowanie...")
+                            } else {
+                                Text("Testuj Opóźnienie")
+                            }
+                        }
+
+                        if (probeResult != null) {
+                            val isSuccess = probeResult?.startsWith("POŁĄCZONO") == true
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSuccess) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+                                modifier = Modifier.padding(start = 8.dp).weight(1f)
+                            ) {
+                                Text(
+                                    text = probeResult ?: "",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSuccess) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.padding(8.dp)
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = "Brak pomiarów",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 2. VISUAL LLM TELEMETRY & PRIVACY SENTINEL PANEL
+            val telemetryList by viewModel.llmTelemetry.collectAsState()
+            val totalCalls = telemetryList.size
+            val successfulCalls = telemetryList.count { it.status == "SUCCESS" }
+            val successRate = if (totalCalls > 0) (successfulCalls * 100) / totalCalls else 100
+            val avgLatency = if (successfulCalls > 0) telemetryList.filter { it.status == "SUCCESS" }.map { it.durationMs }.average().toInt() else 0
+
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("api_telemetry_card"),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Speed,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.tertiary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Monitor Telemetrii API Chmury",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+
+                        if (totalCalls > 0) {
+                            IconButton(
+                                onClick = { viewModel.clearLlmTelemetry() },
+                                modifier = Modifier.testTag("clear_telemetry_btn").size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Clear logs",
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Stats grid row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Total
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text("Zapytania", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                Text("$totalCalls", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        // Success Rate
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text("Skuteczność", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                Text("$successRate%", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (successRate > 80) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+                            }
+                        }
+
+                        // Avg Latency
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text("Śr. Latencja", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                Text("${avgLatency}ms", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    // 3. Dynamic Agent Latency Sparkline Canvas
+                    val successfulTelemetry = remember(telemetryList) {
+                        telemetryList.filter { it.status == "SUCCESS" }.take(10).reversed()
+                    }
+                    if (successfulTelemetry.size > 1) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Wykres Latencji (Ostatnie 10 udanych zapytań):",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        androidx.compose.foundation.Canvas(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp)
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            val maxLat = successfulTelemetry.maxOf { it.durationMs }.toFloat()
+                            val minLat = successfulTelemetry.minOf { it.durationMs }.toFloat()
+                            val diff = if (maxLat == minLat) 1f else (maxLat - minLat)
+                            val pointsCount = successfulTelemetry.size
+                            val stepX = size.width / (pointsCount - 1)
+                            
+                            val path = androidx.compose.ui.graphics.Path()
+                            successfulTelemetry.forEachIndexed { index, item ->
+                                val x = index * stepX
+                                val ratio = (item.durationMs.toFloat() - minLat) / diff
+                                val y = size.height - (ratio * (size.height - 12.dp.toPx())) - 6.dp.toPx()
+                                if (index == 0) {
+                                    path.moveTo(x, y)
+                                } else {
+                                    path.lineTo(x, y)
+                                }
+                            }
+                            
+                            drawPath(
+                                path = path,
+                                color = androidx.compose.ui.graphics.Color(0xFF4CAF50), // Nice green
+                                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                                    width = 3.dp.toPx(),
+                                    cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                                    join = androidx.compose.ui.graphics.StrokeJoin.Round
+                                )
+                            )
+                            
+                            successfulTelemetry.forEachIndexed { index, item ->
+                                val x = index * stepX
+                                val ratio = (item.durationMs.toFloat() - minLat) / diff
+                                val y = size.height - (ratio * (size.height - 12.dp.toPx())) - 6.dp.toPx()
+                                drawCircle(
+                                    color = androidx.compose.ui.graphics.Color(0xFF2E7D32),
+                                    radius = 4.dp.toPx(),
+                                    center = androidx.compose.ui.geometry.Offset(x, y)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "Ostatnie połączenia chmurowe (Log systemowy):",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    if (telemetryList.isEmpty()) {
+                        Text(
+                            text = "Brak odnotowanych zapytań LLM w bazie lokalnej.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 200.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            telemetryList.take(10).forEach { item ->
+                                val isSuccess = item.status == "SUCCESS"
+                                val dateStr = remember(item.timestamp) {
+                                    try {
+                                        java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(item.timestamp))
+                                    } catch (e: Exception) {
+                                        ""
+                                    }
+                                }
+
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                ) {
+                                    Column(modifier = Modifier.padding(8.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = if (isSuccess) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
+                                                ) {
+                                                    Text(
+                                                        text = item.status,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = if (isSuccess) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer,
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = item.provider.uppercase(),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.secondary
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = item.model.substringAfterLast("/"),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    modifier = Modifier.weight(1f, fill = false),
+                                                    maxLines = 1
+                                                )
+                                            }
+                                            Text(
+                                                text = dateStr,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.outline
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.height(4.dp))
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                text = "Pytanie: ${item.promptLength}zn. • Odp: ${item.responseLength}zn.",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+
+                                            Text(
+                                                text = "${item.durationMs}ms",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+
+                                        if (!item.errorMessage.isNullOrBlank()) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = item.errorMessage,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.error,
+                                                maxLines = 2
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

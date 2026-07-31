@@ -189,7 +189,7 @@ fun ActiveAgentsScreen(
                 }
 
                 ExtendedFloatingActionButton(
-                    onClick = onNavigateToAddAgent,
+                    onClick = { showAddAgentDialog = true },
                     icon = { Icon(Icons.Default.PersonAdd, contentDescription = "Add New Agent") },
                     text = { Text("Add Agent") },
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -490,6 +490,13 @@ fun ActiveAgentsScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
+    }
+
+    if (showAddAgentDialog) {
+        MultiStepCreateAgentDialog(
+            viewModel = viewModel,
+            onDismiss = { showAddAgentDialog = false }
+        )
     }
 }
 

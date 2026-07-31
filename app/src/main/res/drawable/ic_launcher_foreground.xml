@@ -4,27 +4,111 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:pathData="M31,63.928c0,0 6.4,-11 12.1,-13.1c7.2,-2.6 26,-1.4 26,-1.4l38.1,38.1L107,108.928l-32,-1L31,63.928z">
+
+    <!-- Hexagonal cybernetic agent colony mesh -->
+    <!-- Central core (glowing node) -->
+    <path
+        android:pathData="M54,42 L64.4,48 L64.4,60 L54,66 L43.6,60 L43.6,48 Z"
+        android:strokeWidth="1.5"
+        android:strokeColor="#FFFFFF" />
+
+    <path
+        android:pathData="M54,46 L60.9,50 L60.9,58 L54,62 L47.1,58 L47.1,50 Z">
         <aapt:attr name="android:fillColor">
             <gradient
-                android:endX="85.84757"
-                android:endY="92.4963"
-                android:startX="42.9492"
-                android:startY="49.59793"
+                android:startX="47"
+                android:startY="46"
+                android:endX="61"
+                android:endY="62"
                 android:type="linear">
-                <item
-                    android:color="#44000000"
-                    android:offset="0.0" />
-                <item
-                    android:color="#00000000"
-                    android:offset="1.0" />
+                <item android:offset="0.0" android:color="#FFFFFF" />
+                <item android:offset="1.0" android:color="#E040FB" />
             </gradient>
         </aapt:attr>
     </path>
+
     <path
+        android:pathData="M54,51 L56.6,52.5 L56.6,55.5 L54,57 L51.4,55.5 L51.4,52.5 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Outer Nodes and Interconnections -->
+    <!-- Top Node Connection & Diamond -->
+    <path
+        android:pathData="M54,22 L54,42"
+        android:strokeWidth="2"
+        android:strokeColor="#EA80FC"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M54,18 L58,22 L54,26 L50,22 Z"
         android:fillColor="#FFFFFF"
-        android:fillType="nonZero"
-        android:pathData="M65.3,45.828l3.8,-6.6c0.2,-0.4 0.1,-0.9 -0.3,-1.1c-0.4,-0.2 -0.9,-0.1 -1.1,0.3l-3.9,6.7c-6.3,-2.8 -13.4,-2.8 -19.7,0l-3.9,-6.7c-0.2,-0.4 -0.7,-0.5 -1.1,-0.3C38.8,38.328 38.7,38.828 38.9,39.228l3.8,6.6C36.2,49.428 31.7,56.028 31,63.928h46C76.3,56.028 71.8,49.428 65.3,45.828zM43.4,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2c-0.3,-0.7 -0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C45.3,56.528 44.5,57.328 43.4,57.328L43.4,57.328zM64.6,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2s-0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C66.5,56.528 65.6,57.328 64.6,57.328L64.6,57.328z"
-        android:strokeWidth="1"
-        android:strokeColor="#00000000" />
+        android:strokeColor="#EA80FC"
+        android:strokeWidth="1.5" />
+
+    <!-- Bottom Node Connection & Diamond -->
+    <path
+        android:pathData="M54,66 L54,86"
+        android:strokeWidth="2"
+        android:strokeColor="#EA80FC"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M54,82 L58,86 L54,90 L50,86 Z"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#EA80FC"
+        android:strokeWidth="1.5" />
+
+    <!-- Top-Right Node Connection & Diamond -->
+    <path
+        android:pathData="M64.4,48 L82,38"
+        android:strokeWidth="2"
+        android:strokeColor="#80DEEA"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M82,34 L86,38 L82,42 L78,38 Z"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#80DEEA"
+        android:strokeWidth="1.5" />
+
+    <!-- Bottom-Right Node Connection & Diamond -->
+    <path
+        android:pathData="M64.4,60 L82,70"
+        android:strokeWidth="2"
+        android:strokeColor="#80DEEA"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M82,66 L86,70 L82,74 L78,70 Z"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#80DEEA"
+        android:strokeWidth="1.5" />
+
+    <!-- Top-Left Node Connection & Diamond -->
+    <path
+        android:pathData="M43.6,48 L26,38"
+        android:strokeWidth="2"
+        android:strokeColor="#80DEEA"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M26,34 L30,38 L26,42 L22,38 Z"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#80DEEA"
+        android:strokeWidth="1.5" />
+
+    <!-- Bottom-Left Node Connection & Diamond -->
+    <path
+        android:pathData="M43.6,60 L26,70"
+        android:strokeWidth="2"
+        android:strokeColor="#80DEEA"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M26,66 L30,70 L26,74 L22,70 Z"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#80DEEA"
+        android:strokeWidth="1.5" />
+
+    <!-- Hexagonal outer safety ring -->
+    <path
+        android:pathData="M54,12 L88.6,32 L88.6,72 L54,92 L19.4,72 L19.4,32 Z"
+        android:strokeWidth="1.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeAlpha="0.4" />
+
 </vector>

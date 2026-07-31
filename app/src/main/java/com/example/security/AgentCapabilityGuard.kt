@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import com.example.BuildConfig
+import com.example.data.AgentPreferencesRepository
+import kotlinx.coroutines.flow.first
 
 enum class AgentCapability(val displayName: String, val systemPermission: String? = null) {
     READ_CALENDAR("Odczyt Kalendarza", android.Manifest.permission.READ_CALENDAR),
@@ -58,11 +60,24 @@ object AgentCapabilityGuard {
                 CapabilityResult.Granted("Zweryfikowano możliwość kolejkowania tła w WorkManager.")
             }
             AgentCapability.LLM_SIMULATION -> {
-                val apiKey = BuildConfig.GEMINI_API_KEY
-                if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
-                    CapabilityResult.Denied("Brak aktywnego klucza Gemini API w BuildConfig.")
+                val prefs = kotlinx.coroutines.runBlocking {
+                    AgentPreferencesRepository(context).agentPreferencesFlow.first()
+                }
+                if (prefs.aiProvider == "openrouter") {
+                    val key = prefs.openRouterApiKey
+                    if (key.isBlank()) {
+                        CapabilityResult.Denied("Brak aktywnego klucza OpenRouter API.")
+                    } else {
+                        CapabilityResult.Granted("Klucz OpenRouter API obecny.")
+                    }
                 } else {
-                    CapabilityResult.Granted("Klucz API obecny (Tryb Protorypu Dev-Only).")
+                    val key = prefs.geminiApiKey
+                    val buildConfigKey = BuildConfig.GEMINI_API_KEY
+                    if (key.isBlank() && (buildConfigKey.isBlank() || buildConfigKey == "MY_GEMINI_API_KEY")) {
+                        CapabilityResult.Denied("Brak aktywnego klucza Gemini API w ustawieniach i BuildConfig.")
+                    } else {
+                        CapabilityResult.Granted("Klucz Gemini API obecny.")
+                    }
                 }
             }
             AgentCapability.DATA_ACCESS_LOGGING -> {

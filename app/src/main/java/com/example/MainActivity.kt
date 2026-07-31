@@ -31,6 +31,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.navDeepLink
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import com.example.ui.CouncilChatScreen
 import com.example.viewmodel.ChatViewModel
 import com.example.ui.DashboardScreen
@@ -53,7 +55,6 @@ import com.example.viewmodel.ColonyViewModel
 
 import android.content.Intent
 import android.os.Build
-import com.example.service.AgentRestSchedulerService
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -80,44 +81,61 @@ class MainActivity : ComponentActivity() {
         )
         
     
-    // Check and request Usage Stats permission
+    // Usage stats mode check without forced system activity redirect on startup
     val appOps = getSystemService(android.content.Context.APP_OPS_SERVICE) as android.app.AppOpsManager
     val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         appOps.unsafeCheckOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), packageName)
     } else {
         appOps.checkOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), packageName)
     }
-    if (mode != android.app.AppOpsManager.MODE_ALLOWED) {
-        try {
-            startActivity(Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS))
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
 
 
-    // Start background scheduler service
+    // Start background scheduler worker
     try {
-        val serviceIntent = Intent(this, AgentRestSchedulerService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
-        }
+        val restSchedulerRequest = PeriodicWorkRequestBuilder<com.example.worker.AgentRestSchedulerWorker>(15, TimeUnit.MINUTES).build()
+        WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
+            "AgentRestSchedulerWork",
+            ExistingPeriodicWorkPolicy.KEEP,
+            restSchedulerRequest
+        )
     } catch (e: Exception) {
         e.printStackTrace()
     }
 
     enableEdgeToEdge()
     setContent {
-      MyApplicationTheme {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
+        val viewModel: ColonyViewModel = viewModel()
+        val preferences by viewModel.agentPreferencesState.collectAsState()
+        val agents by viewModel.agents.collectAsState()
+        val subTasks by viewModel.subTasks.collectAsState()
+        
+        val dominantMood = androidx.compose.runtime.remember(agents, subTasks) {
+            val activeAgent = agents.firstOrNull { it.status == "Active" } ?: agents.firstOrNull()
+            if (activeAgent != null) {
+                com.example.data.calculateAgentMood(activeAgent, subTasks).moodTitle
+            } else null
+        }
+
+        MyApplicationTheme(
+            themeMode = preferences.themeMode,
+            dominantMood = dominantMood
         ) {
-            val navController = rememberNavController()
-            val viewModel: ColonyViewModel = viewModel()
-            val isOnboardingNeeded by viewModel.isOnboardingNeeded.collectAsState()
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                val navController = rememberNavController()
+                val isOnboardingNeeded by viewModel.isOnboardingNeeded.collectAsState()
+            
+            // Handle shared intent
+            androidx.compose.runtime.LaunchedEffect(intent) {
+                if (intent.action == Intent.ACTION_SEND && intent.type == "text/plain") {
+                    intent.getStringExtra(Intent.EXTRA_TEXT)?.let { sharedText ->
+                        viewModel.setSharedWebText(sharedText)
+                        navController.navigate("edde_console")
+                    }
+                }
+            }
             
             if (isOnboardingNeeded == null) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -126,7 +144,11 @@ class MainActivity : ComponentActivity() {
             } else {
                 NavHost(
                     navController = navController, 
-                    startDestination = if (isOnboardingNeeded == true) "onboarding" else "dashboard"
+                    startDestination = if (isOnboardingNeeded == true) "onboarding" else "dashboard",
+                    enterTransition = { slideInHorizontally(animationSpec = tween(300)) { it } + fadeIn(animationSpec = tween(300)) },
+                    exitTransition = { slideOutHorizontally(animationSpec = tween(300)) { -it } + fadeOut(animationSpec = tween(300)) },
+                    popEnterTransition = { slideInHorizontally(animationSpec = tween(300)) { -it } + fadeIn(animationSpec = tween(300)) },
+                    popExitTransition = { slideOutHorizontally(animationSpec = tween(300)) { it } + fadeOut(animationSpec = tween(300)) }
                 ) {
                     composable("onboarding") {
                         OnboardingScreen(
@@ -160,7 +182,18 @@ class MainActivity : ComponentActivity() {
                             onNavigateToProgression = { navController.navigate("progression") },
                             onNavigateToPersonaColony = { navController.navigate("persona_colony") },
                             onNavigateToActiveAgents = { navController.navigate("active_agents") },
-                            onNavigateToAgentDashboard = { navController.navigate("agent_dashboard") }
+                            onNavigateToAgentDashboard = { navController.navigate("agent_dashboard") },
+                            onNavigateToEvolution = { navController.navigate("evolution") },
+                            onNavigateToEddeConsole = { navController.navigate("edde_console") },
+                            onNavigateToSmartFinance = { navController.navigate("smart_finance") },
+                            onNavigateToCalendarIntel = { navController.navigate("calendar_intel") },
+                            onNavigateToWebAnalyzer = { navController.navigate("web_analyzer") },
+                            onNavigateToKnowledgeGraph = { navController.navigate("knowledge_graph") },
+                            onNavigateToAgentBuilder = { navController.navigate("agent_builder") },
+                            onNavigateToStudy = { navController.navigate("study") },
+                            onNavigateToSleepOptimizer = { navController.navigate("sleep_recovery_optimizer") },
+                            onNavigateToPhase5 = { navController.navigate("phase5_evolution") },
+                            onNavigateToAddAgent = { navController.navigate("add_agent") }
                         )
                     }
                     
@@ -276,6 +309,66 @@ class MainActivity : ComponentActivity() {
                         viewModel = viewModel,
                         onBack = { navController.popBackStack() },
                         onNavigateToDashboard = { navController.popBackStack() }
+                    )
+                }
+                composable("evolution") {
+                    com.example.ui.AgentSelfEvolutionScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("edde_console") {
+                    com.example.ui.EddeConsoleScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("smart_finance") {
+                    com.example.ui.FinanceAgentScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("calendar_intel") {
+                    com.example.ui.CalendarIntelScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("web_analyzer") {
+                    com.example.ui.WebContentAnalyzerScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("knowledge_graph") {
+                    com.example.ui.KnowledgeGraphScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("agent_builder") {
+                    com.example.ui.AgentBuilderScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("study") {
+                    com.example.ui.StudyScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("sleep_recovery_optimizer") {
+                    com.example.ui.SleepRecoveryOptimizerScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("phase5_evolution") {
+                    com.example.ui.Phase5EvolutionScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
                     )
                 }
             }

@@ -147,8 +147,8 @@ fun SuggestedAgentsScreen(
             
             Button(
                 onClick = {
-                    if (BuildConfig.GEMINI_API_KEY.isEmpty() || BuildConfig.GEMINI_API_KEY == "MY_GEMINI_API_KEY") {
-                        errorMessage = "Gemini API key is not configured in your Secrets."
+                    if (!viewModel.isApiKeyConfigured) {
+                        errorMessage = "Active AI provider's API key is not configured in settings."
                         return@Button
                     }
                     isLoading = true
@@ -175,16 +175,7 @@ fun SuggestedAgentsScreen(
                             
                             val systemInstructionText = "You are a specialized agent generator helping users optimize their phone colony."
                             
-                            val request = GenerateContentRequest(
-                                contents = listOf(Content(parts = listOf(Part(text = prompt)))),
-                                systemInstruction = Content(parts = listOf(Part(text = systemInstructionText)))
-                            )
-                            
-                            val response = withContext(Dispatchers.IO) {
-                                RetrofitClient.service.generateContent("gemini-3.5-flash", BuildConfig.GEMINI_API_KEY, request)
-                            }
-                            
-                            val text = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: "[]"
+                            val text = com.example.network.AILlmClient.generateContent(context, prompt, systemInstructionText)
                             val cleanedJson = text.substringAfter("```json").substringAfter("```").substringBefore("```").trim()
                             
                             val jsonArray = JSONArray(cleanedJson.ifBlank { text })

@@ -1,38 +1,11 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!--
-    Backup rules for PersonaMesh — restrictive policy.
-    
-    See https://developer.android.com/guide/topics/data/autobackup
-    See https://developer.android.com/about/versions/12/backup-restore
-    
-    Note: This policy applies to devices running API 31+
-    Older devices use the device's system backup policy.
-    
-    PRINCIPLE: Exclude all sensitive data. Back up only application support files.
+<?xml version="1.0" encoding="utf-8"?><!--
+   Sample backup rules file; uncomment and customize as necessary.
+   See https://developer.android.com/guide/topics/data/autobackup
+   for details.
+   Note: This file is ignored for devices older than API 31
+   See https://developer.android.com/about/versions/12/backup-restore
 -->
 <full-backup-content>
-    <!-- 
-        Exclude Room database: Contains agent state, missions, memories, 
-        calendar sync, privacy audits, rules, and user conversations.
-        Never back up without encryption.
-    -->
-    <exclude domain="database" path="*" />
-    
-    <!--
-        Exclude shared preferences: May contain cached credentials, 
-        API keys, tokens, and sensitive user settings.
-    -->
-    <exclude domain="sharedpref" path="*" />
-    
-    <!--
-        Exclude cache: May contain temporary API responses, images, 
-        and sensitive intermediate data.
-    -->
-    <exclude domain="cache" path="*" />
-    
-    <!--
-        Include only application support files (logs, configs, non-PII).
-        Future: if safe data exists, explicitly include by path.
-    -->
-    
+    <exclude domain="sharedpref" path="secret_vault.xml"/>
+    <exclude domain="file" path="datastore/agent_preferences.preferences_pb"/>
 </full-backup-content>

@@ -184,9 +184,10 @@ class ChatViewModel(application: Application) : BaseAgentViewModel(application) 
                 }
             } else {
                 // Gemini API Provider
-                val apiKey = BuildConfig.GEMINI_API_KEY
+                val userApiKey = currentPrefs.geminiApiKey.trim()
+                val apiKey = if (userApiKey.isNotEmpty()) userApiKey else BuildConfig.GEMINI_API_KEY
                 if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
-                    baseRepository.insertMessage(CouncilMessage(role = "model", content = "System Halted: LLM Engine Offline"))
+                    baseRepository.insertMessage(CouncilMessage(role = "model", content = "System Halted: Gemini API Key is missing. Please configure it in Settings."))
                     return@launch
                 }
 
@@ -206,7 +207,7 @@ class ChatViewModel(application: Application) : BaseAgentViewModel(application) 
 
                 apiContents.add(Content(role = "user", parts = currentParts))
 
-                val model = "gemini-3.5-flash"
+                val model = currentPrefs.geminiSelectedModel.ifBlank { "gemini-3.5-flash" }
 
                 val generationConfig = if (mode == "Deep Think") {
                     GenerationConfig(thinkingConfig = ThinkingConfig(thinkingLevel = "HIGH"))
@@ -250,7 +251,7 @@ class ChatViewModel(application: Application) : BaseAgentViewModel(application) 
                     )
 
                     val judgeResponse = withContext(Dispatchers.IO) {
-                        RetrofitClient.service.generateContent("gemini-3.5-flash", apiKey, judgeRequest)
+                        RetrofitClient.service.generateContent(model, apiKey, judgeRequest)
                     }
 
                     var confidence = "Medium (Unknown consensus)"

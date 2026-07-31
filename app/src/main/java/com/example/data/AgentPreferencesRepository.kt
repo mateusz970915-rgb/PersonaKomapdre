@@ -7,7 +7,9 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.security.LocalEncryptedVault
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -20,9 +22,14 @@ data class AgentPreferences(
     val maxActiveTasksPerPersona: Int = 5,
     val notificationsEnabled: Boolean = true,
     val strictManualOverride: Boolean = false,
-    val aiProvider: String = "gemini",
+    val aiProvider: String = "openrouter",
     val openRouterApiKey: String = "",
-    val openRouterSelectedModel: String = "meta-llama/llama-3.3-70b-instruct:free"
+    val openRouterSelectedModel: String = "meta-llama/llama-3.3-70b-instruct:free",
+    val geminiApiKey: String = "",
+    val geminiSelectedModel: String = "gemini-3.5-flash",
+    val themeMode: String = "Default",
+    val isFocusModeActive: Boolean = false,
+    val hasSeenWalkthrough: Boolean = false
 )
 
 class AgentPreferencesRepository(private val context: Context) {
@@ -35,8 +42,12 @@ class AgentPreferencesRepository(private val context: Context) {
         val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
         val STRICT_MANUAL_OVERRIDE = booleanPreferencesKey("strict_manual_override")
         val AI_PROVIDER = stringPreferencesKey("ai_provider")
-        val OPENROUTER_API_KEY = stringPreferencesKey("openrouter_api_key")
         val OPENROUTER_SELECTED_MODEL = stringPreferencesKey("openrouter_selected_model")
+        val GEMINI_SELECTED_MODEL = stringPreferencesKey("gemini_selected_model")
+        val THEME_MODE = stringPreferencesKey("theme_mode")
+        val IS_FOCUS_MODE_ACTIVE = booleanPreferencesKey("is_focus_mode_active")
+        val HAS_SEEN_WALKTHROUGH = booleanPreferencesKey("has_seen_walkthrough")
+        val LAST_UPDATED = longPreferencesKey("last_updated")
     }
 
     val agentPreferencesFlow: Flow<AgentPreferences> = context.agentDataStore.data.map { preferences ->
@@ -47,10 +58,27 @@ class AgentPreferencesRepository(private val context: Context) {
             maxActiveTasksPerPersona = preferences[MAX_ACTIVE_TASKS] ?: 5,
             notificationsEnabled = preferences[NOTIFICATIONS_ENABLED] ?: true,
             strictManualOverride = preferences[STRICT_MANUAL_OVERRIDE] ?: false,
-            aiProvider = preferences[AI_PROVIDER] ?: "gemini",
-            openRouterApiKey = preferences[OPENROUTER_API_KEY] ?: "",
-            openRouterSelectedModel = preferences[OPENROUTER_SELECTED_MODEL] ?: "meta-llama/llama-3.3-70b-instruct:free"
+            aiProvider = preferences[AI_PROVIDER] ?: "openrouter",
+            openRouterApiKey = LocalEncryptedVault.getSecret(context, "openRouterApiKey") ?: "",
+            openRouterSelectedModel = preferences[OPENROUTER_SELECTED_MODEL] ?: "meta-llama/llama-3.3-70b-instruct:free",
+            geminiApiKey = LocalEncryptedVault.getSecret(context, "geminiApiKey") ?: "",
+            geminiSelectedModel = preferences[GEMINI_SELECTED_MODEL] ?: "gemini-3.5-flash",
+            themeMode = preferences[THEME_MODE] ?: "Default",
+            isFocusModeActive = preferences[IS_FOCUS_MODE_ACTIVE] ?: false,
+            hasSeenWalkthrough = preferences[HAS_SEEN_WALKTHROUGH] ?: false
         )
+    }
+
+    suspend fun updateThemeMode(mode: String) {
+        context.agentDataStore.edit { preferences ->
+            preferences[THEME_MODE] = mode
+        }
+    }
+
+    suspend fun updateFocusModeActive(active: Boolean) {
+        context.agentDataStore.edit { preferences ->
+            preferences[IS_FOCUS_MODE_ACTIVE] = active
+        }
     }
 
     suspend fun updateAiProvider(provider: String) {
@@ -60,14 +88,28 @@ class AgentPreferencesRepository(private val context: Context) {
     }
 
     suspend fun updateOpenRouterApiKey(key: String) {
+        LocalEncryptedVault.saveSecret(context, "openRouterApiKey", key)
         context.agentDataStore.edit { preferences ->
-            preferences[OPENROUTER_API_KEY] = key
+            preferences[LAST_UPDATED] = System.currentTimeMillis()
         }
     }
 
     suspend fun updateOpenRouterSelectedModel(model: String) {
         context.agentDataStore.edit { preferences ->
             preferences[OPENROUTER_SELECTED_MODEL] = model
+        }
+    }
+
+    suspend fun updateGeminiApiKey(key: String) {
+        LocalEncryptedVault.saveSecret(context, "geminiApiKey", key)
+        context.agentDataStore.edit { preferences ->
+            preferences[LAST_UPDATED] = System.currentTimeMillis()
+        }
+    }
+
+    suspend fun updateGeminiSelectedModel(model: String) {
+        context.agentDataStore.edit { preferences ->
+            preferences[GEMINI_SELECTED_MODEL] = model
         }
     }
 
@@ -104,6 +146,12 @@ class AgentPreferencesRepository(private val context: Context) {
     suspend fun updateStrictManualOverride(override: Boolean) {
         context.agentDataStore.edit { preferences ->
             preferences[STRICT_MANUAL_OVERRIDE] = override
+        }
+    }
+
+    suspend fun updateHasSeenWalkthrough(seen: Boolean) {
+        context.agentDataStore.edit { preferences ->
+            preferences[HAS_SEEN_WALKTHROUGH] = seen
         }
     }
 }

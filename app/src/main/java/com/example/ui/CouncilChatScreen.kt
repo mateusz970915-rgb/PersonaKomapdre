@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Psychology
@@ -28,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -44,6 +47,17 @@ fun CouncilChatScreen(
     var inputText by remember { mutableStateOf("") }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     var selectedMode by remember { mutableStateOf("Fast") }
+    
+    var showModelDropdown by remember { mutableStateOf(false) }
+    val geminiModelsList = remember {
+        listOf(
+            Pair("gemini-3.5-flash", "Google Gemini 3.5 Flash (Szybki i zoptymalizowany)"),
+            Pair("gemini-3.1-pro-preview", "Google Gemini 3.1 Pro Preview (Zaawansowane wnioskowanie)"),
+            Pair("gemini-3.1-flash-lite-preview", "Google Gemini 3.1 Flash Lite (Lekki i szybki)"),
+            Pair("gemini-2.5-flash-image", "Google Gemini 2.5 Flash Image (Multimodalny / Grafika)"),
+            Pair("gemini-3.1-flash-image-preview", "Google Gemini 3.1 Flash Image Preview (Wysoka jakość multimodalna)")
+        )
+    }
     
     val context = LocalContext.current
     val agentPrefs by chatViewModel.agentPreferencesState.collectAsState()
@@ -63,7 +77,8 @@ fun CouncilChatScreen(
                         val activeEngineLabel = if (agentPrefs.aiProvider == "openrouter") {
                             "OpenRouter (${agentPrefs.openRouterSelectedModel.substringAfterLast("/")})"
                         } else {
-                            "Gemini 3.5 Flash"
+                            val matched = geminiModelsList.find { it.first == agentPrefs.geminiSelectedModel }
+                            "Gemini (${matched?.first ?: agentPrefs.geminiSelectedModel})"
                         }
                         Text(
                             text = "Engine: $activeEngineLabel",
@@ -93,6 +108,144 @@ fun CouncilChatScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // Interactive Provider & Model Switcher Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Wybrany dostawca API:",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Row(
+                                modifier = Modifier.padding(top = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                FilterChip(
+                                    selected = agentPrefs.aiProvider == "gemini",
+                                    onClick = { chatViewModel.updateAiProvider("gemini") },
+                                    label = { Text("Google Gemini") },
+                                    modifier = Modifier.testTag("council_provider_gemini_chip")
+                                )
+                                FilterChip(
+                                    selected = agentPrefs.aiProvider == "openrouter",
+                                    onClick = { chatViewModel.updateAiProvider("openrouter") },
+                                    label = { Text("OpenRouter") },
+                                    modifier = Modifier.testTag("council_provider_openrouter_chip")
+                                )
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Model Selection Dropdown
+                    val currentModelName = if (agentPrefs.aiProvider == "openrouter") {
+                        agentPrefs.openRouterSelectedModel.substringAfterLast("/")
+                    } else {
+                        val matched = geminiModelsList.find { it.first == agentPrefs.geminiSelectedModel }
+                        matched?.second ?: agentPrefs.geminiSelectedModel
+                    }
+                    
+                    Column {
+                        Text(
+                            text = "Aktywny model:",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        
+                        Box(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                            OutlinedButton(
+                                onClick = { showModelDropdown = true },
+                                modifier = Modifier.fillMaxWidth().testTag("council_select_model_dropdown_btn"),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = currentModelName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Icon(
+                                        imageVector = if (showModelDropdown) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                        contentDescription = "Dropdown"
+                                    )
+                                }
+                            }
+                            
+                            DropdownMenu(
+                                expanded = showModelDropdown,
+                                onDismissRequest = { showModelDropdown = false },
+                                modifier = Modifier.fillMaxWidth(0.9f)
+                            ) {
+                                if (agentPrefs.aiProvider == "openrouter") {
+                                    val openRouterModels by chatViewModel.openRouterFreeModels.collectAsState()
+                                    if (openRouterModels.isEmpty()) {
+                                        DropdownMenuItem(
+                                            text = { Text("Brak wolnych modeli (Kliknij by pobrać)") },
+                                            onClick = {
+                                                chatViewModel.fetchOpenRouterFreeModels()
+                                                showModelDropdown = false
+                                            }
+                                        )
+                                    } else {
+                                        openRouterModels.forEach { model ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Column {
+                                                        Text(model.name ?: model.id, fontWeight = FontWeight.Bold)
+                                                        Text(model.id, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                                                    }
+                                                },
+                                                onClick = {
+                                                    chatViewModel.updateOpenRouterSelectedModel(model.id)
+                                                    showModelDropdown = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    geminiModelsList.forEach { (modelId, modelName) ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Column {
+                                                    Text(modelName, fontWeight = FontWeight.Bold)
+                                                    Text(modelId, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                                                }
+                                            },
+                                            onClick = {
+                                                chatViewModel.updateGeminiSelectedModel(modelId)
+                                                showModelDropdown = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)

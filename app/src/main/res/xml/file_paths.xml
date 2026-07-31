@@ -1,13 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <!--
-        Restricted FileProvider paths for agent backup/export.
-        
-        Only the 'exports' cache subdirectory is accessible via FileProvider.
-        This prevents unintended file access beyond agent export operations.
-        
-        Example: ContentProvider grant URI points to cache/exports/ only,
-                 not the entire cache or internal storage.
-    -->
     <cache-path name="export_agent_json" path="exports/" />
 </paths>
