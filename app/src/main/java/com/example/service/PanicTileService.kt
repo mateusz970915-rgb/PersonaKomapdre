@@ -1,5 +1,6 @@
 package com.example.service
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Build
 import android.service.quicksettings.TileService
@@ -15,6 +16,8 @@ import kotlinx.coroutines.launch
 @RequiresApi(Build.VERSION_CODES.N)
 class PanicTileService : TileService() {
     
+    @Suppress("DEPRECATION")
+    @SuppressLint("MissingPermission", "DEPRECATION")
     override fun onClick() {
         super.onClick()
         val context = applicationContext
@@ -39,7 +42,6 @@ class PanicTileService : TileService() {
         }
         
         // Collapse notification panel/quick settings
-        @Suppress("DEPRECATION")
         val closeIntent = Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)
         context.sendBroadcast(closeIntent)
     }

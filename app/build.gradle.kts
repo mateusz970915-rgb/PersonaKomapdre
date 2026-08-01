@@ -18,12 +18,14 @@ android {
 
   defaultConfig {
     applicationId = "com.aistudio.personamesh.jshkpq"
+    testApplicationId = "com.aistudio.personamesh.jshkpq.test"
     minSdk = 24
     targetSdk = 36
     versionCode = 1
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    testInstrumentationRunnerArguments["targetPackage"] = "com.aistudio.personamesh.jshkpq"
   }
 
   signingConfigs {
@@ -57,6 +59,19 @@ android {
       // Uses the standard built-in debug signing configuration
     }
   }
+
+  flavorDimensions.add("mode")
+  productFlavors {
+    create("demo") {
+      dimension = "mode"
+      applicationIdSuffix = ".demo"
+      versionNameSuffix = "-demo"
+    }
+    create("production") {
+      dimension = "mode"
+    }
+  }
+
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
@@ -86,12 +101,7 @@ googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.W
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(platform(libs.firebase.bom))
-  // implementation(libs.accompanist.permissions)
   implementation(libs.androidx.activity.compose)
-  // implementation(libs.androidx.camera.camera2)
-  // implementation(libs.androidx.camera.core)
-  // implementation(libs.androidx.camera.lifecycle)
-  // implementation(libs.androidx.camera.view)
   implementation(libs.androidx.compose.material.icons.core)
   implementation(libs.androidx.compose.material.icons.extended)
   implementation(libs.androidx.compose.material3)
@@ -115,16 +125,6 @@ dependencies {
   implementation(libs.converter.moshi)
   implementation(libs.firebase.ai)
   implementation(libs.google.mlkit.translate)
-  // Uncomment to use Firestore:
-  // implementation(libs.firebase.firestore)
-
-  // Firebase Auth with Google Sign-In requires all of the following to be uncommented together.
-  // If you are using Firebase Auth with other providers (e.g. Email/Password), you may only need
-  // firebase-auth.
-  // implementation(libs.firebase.auth)
-  // implementation(libs.androidx.credentials)
-  // implementation(libs.androidx.credentials.play.services)
-  // implementation(libs.googleid)
   implementation(libs.firebase.appcheck.recaptcha)
   implementation(libs.ktor.server.core)
   implementation(libs.ktor.server.netty)
@@ -135,7 +135,6 @@ dependencies {
   implementation(libs.logging.interceptor)
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
-  // implementation(libs.play.services.location)
   implementation(libs.retrofit)
   implementation(libs.retrofit.converter.serialization)
   implementation(libs.kotlinx.serialization.json)

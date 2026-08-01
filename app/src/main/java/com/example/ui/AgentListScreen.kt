@@ -11,9 +11,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.Agent
@@ -48,8 +51,18 @@ fun AgentListScreen(
 ) {
     val agents by viewModel.agentsState.collectAsState()
 
+    var searchQuery by remember { mutableStateOf("") }
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedAgentForColor by remember { mutableStateOf<Agent?>(null) }
+    var selectedAgentForDetail by remember { mutableStateOf<Agent?>(null) }
+
+    val filteredAgents = remember(agents, searchQuery) {
+        if (searchQuery.isBlank()) {
+            agents
+        } else {
+            agents.filter { it.name.contains(searchQuery, ignoreCase = true) }
+        }
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -73,6 +86,30 @@ fun AgentListScreen(
                 .padding(innerPadding)
                 .padding(16.dp)
         ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Search agents by name...") },
+                leadingIcon = {
+                    Icon(Icons.Default.Search, contentDescription = "Search Icon")
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(
+                            onClick = { searchQuery = "" },
+                            modifier = Modifier.testTag("clear_search_button")
+                        ) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear Search")
+                        }
+                    }
+                },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+                    .testTag("agent_search_bar")
+            )
+
             if (agents.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -80,6 +117,17 @@ fun AgentListScreen(
                 ) {
                     Text(
                         text = "No agents registered yet. Tap + to add one.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else if (filteredAgents.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No agents found matching \"$searchQuery\"",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -92,11 +140,12 @@ fun AgentListScreen(
                         .testTag("agent_lazy_column")
                 ) {
                     items(
-                        items = agents,
+                        items = filteredAgents,
                         key = { it.id }
                     ) { agent ->
                         AgentItemCard(
                             agent = agent,
+                            onSelect = { selectedAgentForDetail = agent },
                             onDelete = { viewModel.deleteAgent(agent) },
                             onChangeColor = { selectedAgentForColor = agent }
                         )
@@ -126,11 +175,19 @@ fun AgentListScreen(
             }
         )
     }
+
+    selectedAgentForDetail?.let { agent ->
+        AgentDetailSheet(
+            agent = agent,
+            onDismiss = { selectedAgentForDetail = null }
+        )
+    }
 }
 
 @Composable
 fun AgentItemCard(
     agent: Agent,
+    onSelect: () -> Unit,
     onDelete: () -> Unit,
     onChangeColor: () -> Unit,
     modifier: Modifier = Modifier
@@ -141,6 +198,7 @@ fun AgentItemCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
+            .clickable { onSelect() }
             .testTag("agent_card_${agent.id}"),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -364,4 +422,60 @@ fun AddAgentDialog(
             }
         }
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AgentDetailSheet(
+    agent: Agent,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = agent.name,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                Column {
+                    Text(
+                        text = agent.name,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Role: ${agent.role} • Status: ${agent.status}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            HorizontalDivider()
+
+            AgentActivityChart(agent = agent)
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
 }

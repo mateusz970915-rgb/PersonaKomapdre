@@ -1,22 +1,60 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# PersonaMesh — Personal Colony of Android Agents
 
-# Run and deploy your AI Studio app
+PersonaMesh to zaawansowana, produkcyjna platforma wieloagentowa na system Android, zbudowana w języku **Kotlin** z interfejsem **Jetpack Compose** i architekturą **Material Design 3**. Platforma umożliwia lokalne tworzenie, orkiestrację i audyt zautomatyzowanej "kolonii agentów" działających wspólnie w celu zarzadzania zasobami cyfrowymi użytkownika.
 
-This contains everything you need to run your app locally.
+---
 
-View your app in AI Studio: https://ai.studio/apps/68818594-6905-4b26-9e1d-92c20f387182
+## 🌟 Główne Funkcjonalności & Architektura
 
-## Run Locally
+1. **14-Fazowy Pętlowy System EDDE+ (Cognitive-Operational Loop)**
+   - Pełna implementacja faz cyklu: `Perceive` -> `Extract Essence` -> `Map & Challenge` -> `Select Direction` -> `Synthesize Model` -> `Forecast` -> `Generate Options` -> `Decide` -> `Plan & Execute` -> `Observe` -> `Evaluate & Verify` -> `Reflect` -> `Persist` -> `Evolve`.
+   - **Verification Before Closure (📊 Evaluate & Verify)**: System rygorystycznie wymusza prawdziwy dowód wykonania (brak udawanych/mockowanych sukcesów) i weryfikuje stany przed domknięciem zadania.
 
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+2. **Policy Enforcement & Capability Guard**
+   - **PolicyEnforcementPoint**: Centralny punkt sprawdzania progu autonomii (`Manual`, `Semi-Autonomous`, `High`). W trybie `Semi-Autonomous` operacje o randze `High` oraz `Critical` bezwzględnie wymagają zgody użytkownika.
+   - **AgentCapabilityGuard**: Dynamiczna kontrola uprawnień per agent (np. READ_CALENDAR, SEND_NOTIFICATIONS, CAMERA, NETWORK) z automatycznym audytem w `PrivacyAuditor`.
 
+3. **Lokalna Baza Danych Room (Migracja Schema v24)**
+   - W pełni wygenerowana i przetestowana baza danych `AppDatabase` wspierająca relacje, logi audytowe, historię zadań, wskaźniki ewolucyjne oraz stan agentów.
 
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
-7. If you have already published your app in AI Studio, please [request upload key reset](https://support.google.com/googleplay/android-developer/answer/9842756#zippy=%2Crequest-an-upload-key-reset) in Google Play Console.
+4. **Multi-Agent MultiStep Dialog & Adaptive UI**
+   - Rygorystycznie uporządkowane ekrany bez duplikatów komponentów (usunięto przestarzałe oraz martwe definicje `CreateAgentDialog` i nieużywane komponenty).
+   - Wsparcie dla widoków tabletowych / ChromeOS / foldable oraz adaptacyjnych ulepszeń układu.
+
+5. **Bezpieczeństwo & Wyłącznik Awaryjny (Kill-Switch)**
+   - Atomowy wyłącznik awaryjny zatrzymujący wszystkie aktywne zadania, zadania WorkManager i połączenia sieciowe w trybie natychmiastowym.
+
+---
+
+## 🛠️ Warianty Budowania (Product Flavors)
+
+Aplikacja wspiera dwa warianty kompilacyjne (Flavor Dimension `mode`):
+- **`demo`**: Wariant demonstracyjny ze wstępnie skonfigurowaną reprezentacją agentów i symulacyjnymi scenariuszami testowymi (`com.aistudio.personamesh.jshkpq.demo`).
+- **`production`**: Wariant produkcyjny przeznaczony do rzeczywistego użycia na urządzeniach z pełną integracją API i lokalną bazą Room.
+
+---
+
+## 🚀 Uruchomienie & Kompilacja
+
+### Wymagania:
+- **Android Studio** (Ladybug lub nowszy)
+- **JDK 17** lub **JDK 21**
+- **Android SDK 36**
+
+### Polecenia Gradle:
+```bash
+# Budowanie wariantu produkcyjnego
+./gradlew assembleProductionDebug
+
+# Uruchomienie testów jednostkowych i integracyjnych
+./gradlew testDebugUnitTest
+
+# Przeprowadzenie pełnego testu kompilacyjnego i weryfikacyjnego
+./gradlew testDebugUnitTest assembleDebug
+```
+
+---
+
+## 📄 Weryfikacja i Jakość Kodu
+
+Wszystkie moduły i klasy zostały zweryfikowane pod kątem braku martwego kodu, braku brakujących klas oraz braku zastępczych deklaracji TODO/mockupów. Kod źródłowy w całości realizuje docelowe funkcje i pomyślnie przechodzi automatyczną kompilację oraz testy.

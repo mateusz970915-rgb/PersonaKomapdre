@@ -328,24 +328,6 @@ fun ActiveAgentsScreen(
         }
     }
 
-    // Modal Dialog 1: Add New Agent (Name, Role, Purpose)
-    if (showAddAgentDialog) {
-        CreateAgentDialog(
-            onDismiss = { showAddAgentDialog = false },
-            onConfirm = { name, role, purpose ->
-                viewModel.addAgent(
-                    name = name,
-                    type = "Custom",
-                    role = role,
-                    permissions = "Standard",
-                    traits = purpose,
-                    systemPrompt = purpose
-                )
-                showAddAgentDialog = false
-            }
-        )
-    }
-
     // Modal Dialog 2: Assign Task to Agent
     selectedAgentForNewTask?.let { targetAgent ->
         AlertDialog(
@@ -487,6 +469,8 @@ fun ActiveAgentsScreen(
                     )
                 }
 
+                AgentActivityChart(agent = agent)
+
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
@@ -498,109 +482,6 @@ fun ActiveAgentsScreen(
             onDismiss = { showAddAgentDialog = false }
         )
     }
-}
-
-@Composable
-fun CreateAgentDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (name: String, role: String, purpose: String) -> Unit
-) {
-    var name by remember { mutableStateOf("") }
-    var role by remember { mutableStateOf("") }
-    var purpose by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.SmartToy,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(10.dp))
-                Text("Create New Agent", fontWeight = FontWeight.Bold)
-            }
-        },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = "Input the agent's name, role, and purpose to add them to your active colony:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Agent Name") },
-                    placeholder = { Text("e.g. Data Sentinel") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("input_agent_name")
-                )
-
-                OutlinedTextField(
-                    value = role,
-                    onValueChange = { role = it },
-                    label = { Text("Role") },
-                    placeholder = { Text("e.g. Privacy & Security Audit") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("input_agent_role")
-                )
-
-                OutlinedTextField(
-                    value = purpose,
-                    onValueChange = { purpose = it },
-                    label = { Text("Purpose / Core Responsibilities") },
-                    placeholder = { Text("e.g. Continuously monitors app permissions, checks for unauthorized data access, and logs compliance audits.") },
-                    maxLines = 4,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("input_agent_purpose")
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (name.isNotBlank() && role.isNotBlank()) {
-                        onConfirm(name.trim(), role.trim(), purpose.trim())
-                    }
-                },
-                enabled = name.isNotBlank() && role.isNotBlank(),
-                modifier = Modifier.testTag("confirm_create_agent_btn")
-            ) {
-                Text("Add Agent")
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                modifier = Modifier.testTag("cancel_create_agent_btn")
-            ) {
-                Text("Cancel")
-            }
-        }
-    )
 }
 
 @Composable

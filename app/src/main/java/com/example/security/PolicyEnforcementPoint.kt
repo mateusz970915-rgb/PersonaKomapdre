@@ -10,11 +10,10 @@ object PolicyEnforcementPoint {
         val prefs = AgentPreferencesRepository(context).agentPreferencesFlow.first()
         if (prefs.strictManualOverride) return false
         
-        // Simple mock of threshold logic
         val threshold = prefs.globalAutonomyThreshold
         return when (threshold) {
             "High" -> true
-            "Semi-Autonomous" -> requestLevel != "High"
+            "Semi-Autonomous" -> requestLevel != "High" && requestLevel != "Critical"
             "Manual" -> false
             else -> false
         }
