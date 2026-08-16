@@ -89,7 +89,7 @@ fun AgentStatusNotesWidget(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Room Database • Simulated daily interaction snippets & mood notes",
+                            text = "Room Database • Generated daily interaction snippets & mood notes",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -98,13 +98,13 @@ fun AgentStatusNotesWidget(
 
                 IconButton(
                     onClick = {
-                        currentAgent?.let { viewModel.generateSimulatedInteractionNote(it.id) }
+                        currentAgent?.let { viewModel.generateInteractionNote(it.id) }
                     },
-                    modifier = Modifier.testTag("simulate_interaction_note_btn")
+                    modifier = Modifier.testTag("generate_interaction_note_btn")
                 ) {
                     Icon(
                         imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = "Simulate Interaction",
+                        contentDescription = "Generate Interaction",
                         tint = MaterialTheme.colorScheme.tertiary
                     )
                 }

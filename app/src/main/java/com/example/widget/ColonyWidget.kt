@@ -32,18 +32,26 @@ class ColonyWidget : GlanceAppWidget() {
         val database = AppDatabase.getDatabase(context)
         val dao = database.colonyDao()
         
+        val agents = dao.getAllAgents().first()
+        val activeAgents = agents.count { it.status == "Active" || it.status == "Busy" }
+        
+        val subTasks = dao.getAllSubTasks().first()
+        val totalTasks = subTasks.size
+        val completedTasks = subTasks.count { it.status == "Completed" }
+        val completionPercentage = if (totalTasks > 0) (completedTasks * 100) / totalTasks else 0
+        
         val messages = dao.getCouncilMessages().first()
         val lastMessage = messages.lastOrNull { it.role == "system" }?.content ?: "No critical alerts."
         val missions = dao.getMissions().first().filter { it.status == "Active" }
         val activeMissionStr = missions.firstOrNull()?.let { "${it.goal}: ${it.status}" } ?: "No active missions"
 
         provideContent {
-            WidgetContent(lastMessage = lastMessage, activeMissionStr = activeMissionStr)
+            WidgetContent(lastMessage = lastMessage, activeMissionStr = activeMissionStr, activeAgents = activeAgents, completionPercentage = completionPercentage)
         }
     }
 
     @Composable
-    private fun WidgetContent(lastMessage: String, activeMissionStr: String) {
+    private fun WidgetContent(lastMessage: String, activeMissionStr: String, activeAgents: Int, completionPercentage: Int) {
         Column(
             modifier = GlanceModifier
                 .fillMaxSize()
@@ -59,6 +67,16 @@ class ColonyWidget : GlanceAppWidget() {
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
                 ),
+                modifier = GlanceModifier.padding(bottom = 8.dp)
+            )
+            Text(
+                text = "Active Agents: $activeAgents",
+                style = TextStyle(fontSize = 14.sp),
+                modifier = GlanceModifier.padding(bottom = 4.dp)
+            )
+            Text(
+                text = "Tasks Completed: $completionPercentage%",
+                style = TextStyle(fontSize = 14.sp),
                 modifier = GlanceModifier.padding(bottom = 8.dp)
             )
             Text(

@@ -19,21 +19,28 @@ import java.util.Date
 import java.util.Locale
 import java.util.Random
 
+import com.example.ui.components.ChartContainerWithEmptyState
+import com.example.ui.components.isZeroOrEmpty
+
 @Composable
 fun AgentActivityChart(
     agent: Agent,
     modifier: Modifier = Modifier
 ) {
+    val hasData = agent.lastActiveTimestamp > 0
     val activityData = remember(agent.id, agent.lastActiveTimestamp) {
-        val baseTimestamp = if (agent.lastActiveTimestamp > 0) agent.lastActiveTimestamp else System.currentTimeMillis()
-        val seed = (agent.id * 31 + (baseTimestamp / 100000)).toInt()
-        val random = Random(seed.toLong())
-        FloatArray(7) { i ->
-            if (i == 6) {
-                // Latest activity frequency around lastActiveTimestamp
-                (4 + random.nextInt(5)).toFloat()
-            } else {
-                (1 + random.nextInt(6)).toFloat()
+        if (!hasData) {
+            FloatArray(7) { 0f }
+        } else {
+            val baseTimestamp = agent.lastActiveTimestamp
+            val seed = (agent.id * 31 + (baseTimestamp / 100000)).toInt()
+            val random = Random(seed.toLong())
+            FloatArray(7) { i ->
+                if (i == 6) {
+                    (4 + random.nextInt(5)).toFloat()
+                } else {
+                    (1 + random.nextInt(6)).toFloat()
+                }
             }
         }
     }
@@ -52,7 +59,7 @@ fun AgentActivityChart(
         if (agent.lastActiveTimestamp > 0) {
             SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date(agent.lastActiveTimestamp))
         } else {
-            "Recently active"
+            "No activity recorded"
         }
     }
 
@@ -97,18 +104,25 @@ fun AgentActivityChart(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp)
+            ChartContainerWithEmptyState(
+                hasData = !entryModel.isZeroOrEmpty(),
+                emptyTitle = "No Agent Activity",
+                emptyMessage = "This agent has not logged any recent activity.",
+                emptyStateHeight = 180.dp
             ) {
-                Chart(
-                    chart = lineChart(),
-                    model = entryModel,
-                    startAxis = rememberStartAxis(),
-                    bottomAxis = rememberBottomAxis(),
-                    modifier = Modifier.fillMaxSize()
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                ) {
+                    Chart(
+                        chart = lineChart(),
+                        model = entryModel,
+                        startAxis = rememberStartAxis(),
+                        bottomAxis = rememberBottomAxis(),
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         }
     }

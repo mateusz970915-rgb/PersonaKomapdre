@@ -5,6 +5,8 @@ import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
 import com.example.worker.RuleEvaluatorWorker
 import com.example.worker.DailySummaryWorker
+import com.example.worker.HeatmapSummaryWorker
+import com.example.worker.MilestoneTrackerWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 
@@ -46,6 +48,7 @@ import com.example.ui.OnboardingScreen
 import com.example.ui.RuleEditorScreen
 import com.example.ui.SuggestedAgentsScreen
 import com.example.ui.SettingsScreen
+import com.example.ui.PersonaManagementScreen
 import com.example.ui.InterAgentChatScreen
 import com.example.ui.TaskBoardScreen
 import com.example.ui.ActiveAgentsScreen
@@ -55,10 +58,14 @@ import com.example.viewmodel.ColonyViewModel
 
 import android.content.Intent
 import android.os.Build
+import com.example.workers.AgentResourceMonitorWorker
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    
+    val monitorWorkRequest = PeriodicWorkRequestBuilder<AgentResourceMonitorWorker>(15, TimeUnit.MINUTES).build()
+    WorkManager.getInstance(this).enqueue(monitorWorkRequest)
     
     // Request runtime permissions
     val permissions = mutableListOf(
@@ -80,9 +87,31 @@ class MainActivity : ComponentActivity() {
             dailySummaryRequest
         )
         
+        val heatmapSummaryRequest = PeriodicWorkRequestBuilder<HeatmapSummaryWorker>(1, TimeUnit.DAYS).build()
+        WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
+            "HeatmapSummaryWork",
+            ExistingPeriodicWorkPolicy.KEEP,
+            heatmapSummaryRequest
+        )
+        
+        val milestoneRequest = PeriodicWorkRequestBuilder<MilestoneTrackerWorker>(4, TimeUnit.HOURS).build()
+        WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
+            "MilestoneTrackerWork",
+            ExistingPeriodicWorkPolicy.KEEP,
+            milestoneRequest
+        )
+        
+        val exportDatabaseRequest = PeriodicWorkRequestBuilder<com.example.workers.ExportDatabaseWorker>(1, TimeUnit.DAYS).build()
+        WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
+            "ExportDatabaseWork",
+            ExistingPeriodicWorkPolicy.KEEP,
+            exportDatabaseRequest
+        )
+        
     
     // Usage stats mode check without forced system activity redirect on startup
     val appOps = getSystemService(android.content.Context.APP_OPS_SERVICE) as android.app.AppOpsManager
+    @Suppress("DEPRECATION")
     val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         appOps.unsafeCheckOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), packageName)
     } else {
@@ -90,9 +119,38 @@ class MainActivity : ComponentActivity() {
     }
 
 
-    // Start background scheduler worker
-    try {
-        val restSchedulerRequest = PeriodicWorkRequestBuilder<com.example.worker.AgentRestSchedulerWorker>(15, TimeUnit.MINUTES).build()
+        // Start interaction trend anomaly worker
+        try {
+            val anomalyRequest = PeriodicWorkRequestBuilder<com.example.worker.InteractionAnomalyWorker>(15, TimeUnit.MINUTES).build()
+            WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
+                "InteractionAnomalyWork",
+                ExistingPeriodicWorkPolicy.KEEP,
+                anomalyRequest
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // Start agent data sync worker
+        try {
+            val syncConstraints = androidx.work.Constraints.Builder()
+                .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+                .build()
+            val agentDataSyncRequest = PeriodicWorkRequestBuilder<com.example.worker.AgentDataSyncWorker>(15, TimeUnit.MINUTES)
+                .setConstraints(syncConstraints)
+                .build()
+            WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
+                "AgentDataSyncWork",
+                ExistingPeriodicWorkPolicy.KEEP,
+                agentDataSyncRequest
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // Start background scheduler worker
+        try {
+            val restSchedulerRequest = PeriodicWorkRequestBuilder<com.example.worker.AgentRestSchedulerWorker>(15, TimeUnit.MINUTES).build()
         WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
             "AgentRestSchedulerWork",
             ExistingPeriodicWorkPolicy.KEEP,
@@ -102,6 +160,11 @@ class MainActivity : ComponentActivity() {
         e.printStackTrace()
     }
 
+    try {
+            val memorySnapshotRequest = PeriodicWorkRequestBuilder<com.example.workers.MemorySnapshotWorker>(24, TimeUnit.HOURS).build()
+            WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork("MemorySnapshotWork", ExistingPeriodicWorkPolicy.KEEP, memorySnapshotRequest)
+        } catch (e: Exception) { e.printStackTrace() }
+
     enableEdgeToEdge()
     setContent {
         val viewModel: ColonyViewModel = viewModel()
@@ -109,15 +172,19 @@ class MainActivity : ComponentActivity() {
         val agents by viewModel.agents.collectAsState()
         val subTasks by viewModel.subTasks.collectAsState()
         
+        val personaIsDarkMode by viewModel.personaPreferences.isDarkMode.collectAsState(initial = false)
         val dominantMood = androidx.compose.runtime.remember(agents, subTasks) {
             val activeAgent = agents.firstOrNull { it.status == "Active" } ?: agents.firstOrNull()
             if (activeAgent != null) {
                 com.example.data.calculateAgentMood(activeAgent, subTasks).moodTitle
             } else null
         }
+        
+        val actualThemeMode = if (personaIsDarkMode) "Dark" else "Light"
 
         MyApplicationTheme(
-            themeMode = preferences.themeMode,
+            darkTheme = personaIsDarkMode,
+            themeMode = actualThemeMode,
             dominantMood = dominantMood
         ) {
             Surface(
@@ -178,7 +245,9 @@ class MainActivity : ComponentActivity() {
                             onNavigateToSettings = { navController.navigate("settings") },
                             onNavigateToBadges = { navController.navigate("badges") },
                             onNavigateToInterAgentChat = { navController.navigate("inter_agent_chat") },
+                            onNavigateToCommandInjection = { navController.navigate("command_injection") },
                             onNavigateToTaskBoard = { navController.navigate("task_board") },
+                            onNavigateToPersonas = { navController.navigate("personas") },
                             onNavigateToProgression = { navController.navigate("progression") },
                             onNavigateToPersonaColony = { navController.navigate("persona_colony") },
                             onNavigateToActiveAgents = { navController.navigate("active_agents") },
@@ -193,6 +262,10 @@ class MainActivity : ComponentActivity() {
                             onNavigateToStudy = { navController.navigate("study") },
                             onNavigateToSleepOptimizer = { navController.navigate("sleep_recovery_optimizer") },
                             onNavigateToPhase5 = { navController.navigate("phase5_evolution") },
+                            onNavigateToInteractions = { navController.navigate("interactions") },
+                            onNavigateToPersonaMesh = { navController.navigate("persona_mesh") },
+                            onNavigateToActivityHeatmap = { navController.navigate("activity_heatmap") },
+                            onNavigateToPersonaCategories = { navController.navigate("persona_categories") },
                             onNavigateToAddAgent = { navController.navigate("add_agent") }
                         )
                     }
@@ -254,9 +327,47 @@ class MainActivity : ComponentActivity() {
                             onBack = { navController.popBackStack() }
                         )
                     }
+                    composable("interactions") {
+                        com.example.ui.AgentInteractionsScreen(
+                            viewModel = viewModel,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    
+                    
+                    composable("persona_settings") {
+                        com.example.ui.PersonaSettingsScreen(
+                            viewModel = viewModel,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+                    composable("persona_mesh") {
+                        com.example.ui.PersonaMeshScreen(
+                            viewModel = viewModel,
+                            onNavigateToSettings = { navController.navigate("persona_settings") },
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+                    composable("personas") {
+                        PersonaManagementScreen(onNavigateBack = { navController.popBackStack() })
+                    }
                     composable("settings") {
                         SettingsScreen(
                             viewModel = viewModel,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+                    composable("fts_search") {
+                        val searchQuery by viewModel.ftsSearchQuery.collectAsState()
+                        val searchResults by viewModel.ftsSearchResults.collectAsState()
+                        val allFtsContent by viewModel.allFtsContent.collectAsState()
+
+                        com.example.ui.FtsSearchScreen(
+                            searchQuery = searchQuery,
+                            searchResults = searchResults,
+                            allContentList = allFtsContent,
+                            onQueryChange = { viewModel.searchFts(it) },
                             onBack = { navController.popBackStack() }
                         )
                     }
@@ -335,6 +446,16 @@ class MainActivity : ComponentActivity() {
                         onBack = { navController.popBackStack() }
                     )
                 }
+                composable("smart_home") {
+                    com.example.ui.SmartHomeAgentScreen(
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+                composable("sandbox") {
+                    com.example.ui.SandboxSimulationScreen(
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
                 composable("web_analyzer") {
                     com.example.ui.WebContentAnalyzerScreen(
                         viewModel = viewModel,
@@ -371,6 +492,55 @@ class MainActivity : ComponentActivity() {
                         onBack = { navController.popBackStack() }
                     )
                 }
+                composable("self_healing") {
+                    com.example.ui.SelfHealingScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("workflow_builder") {
+                    com.example.ui.WorkflowBuilderScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("vector_search") {
+                    com.example.ui.VectorSearchScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("hallucination_detector") {
+                    com.example.ui.HallucinationDetectorScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("mcts_visualization") {
+                    com.example.ui.MctsVisualizationScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("multi_colony") {
+                    com.example.ui.MultiColonyScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("command_injection") {
+                    com.example.ui.AgentCommandInjectionScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("activity_heatmap") {
+                    com.example.ui.AgentActivityHeatmapScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+
             }
             }
         }

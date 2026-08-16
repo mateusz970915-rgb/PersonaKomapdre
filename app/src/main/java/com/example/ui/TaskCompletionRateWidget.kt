@@ -16,6 +16,9 @@ import com.patrykandpatrick.vico.compose.axis.vertical.rememberStartAxis
 import com.patrykandpatrick.vico.compose.chart.Chart
 import com.patrykandpatrick.vico.compose.chart.column.columnChart
 import com.patrykandpatrick.vico.compose.chart.line.lineChart
+import com.example.ui.components.ChartContainerWithEmptyState
+import com.example.ui.components.ChartTrendSummaryView
+import com.example.ui.components.isZeroOrEmpty
 import com.patrykandpatrick.vico.core.entry.entryModelOf
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -74,6 +77,17 @@ fun TaskCompletionRateWidget(
         Quadruple(rates, labels, allCompletedCount, calculatedAvg)
     }
 
+    val (currentPeriodCompleted, previousPeriodCompleted) = remember(subTasksList) {
+        val now = System.currentTimeMillis()
+        val oneDayMs = 24 * 60 * 60 * 1000L
+        val currentPeriodStart = now - (7 * oneDayMs)
+        val previousPeriodStart = now - (14 * oneDayMs)
+
+        val cur = subTasksList.count { (it.timestamp in currentPeriodStart..now || it.completedAt in currentPeriodStart..now) && (it.status.equals("Completed", ignoreCase = true) || it.completedAt > 0L) }
+        val prev = subTasksList.count { (it.timestamp in previousPeriodStart until currentPeriodStart || it.completedAt in previousPeriodStart until currentPeriodStart) && (it.status.equals("Completed", ignoreCase = true) || it.completedAt > 0L) }
+        cur to prev
+    }
+
     val chartModel = entryModelOf(
         dailyRates[0],
         dailyRates[1],
@@ -127,30 +141,45 @@ fun TaskCompletionRateWidget(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            ChartTrendSummaryView(
+                currentTotal = currentPeriodCompleted,
+                previousTotal = previousPeriodCompleted,
+                unitLabel = "completed tasks",
+                periodDays = 7,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
 
             // Vico Chart Rendering
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp)
+            ChartContainerWithEmptyState(
+                hasData = !chartModel.isZeroOrEmpty(),
+                emptyTitle = "No Task Completion Data",
+                emptyMessage = "No tasks were marked complete during the last 7 days.",
+                emptyStateHeight = 180.dp
             ) {
-                if (chartType == "Column") {
-                    Chart(
-                        chart = columnChart(),
-                        model = chartModel,
-                        startAxis = rememberStartAxis(),
-                        bottomAxis = rememberBottomAxis(),
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Chart(
-                        chart = lineChart(),
-                        model = chartModel,
-                        startAxis = rememberStartAxis(),
-                        bottomAxis = rememberBottomAxis(),
-                        modifier = Modifier.fillMaxSize()
-                    )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                ) {
+                    if (chartType == "Column") {
+                        Chart(
+                            chart = columnChart(),
+                            model = chartModel,
+                            startAxis = rememberStartAxis(),
+                            bottomAxis = rememberBottomAxis(),
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Chart(
+                            chart = lineChart(),
+                            model = chartModel,
+                            startAxis = rememberStartAxis(),
+                            bottomAxis = rememberBottomAxis(),
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
             }
 

@@ -43,7 +43,43 @@ fun AgentActivityHeatmapWidget(
     modifier: Modifier = Modifier
 ) {
     var selectedViewType by remember { mutableStateOf("All Activity") } // "All Activity", "Subtasks", "Decisions", "Logs"
-    var chartStyle by remember { mutableStateOf("Column") } // "Column", "Line"
+    var chartStyle by remember { mutableStateOf("Column") }
+    
+    val themes = mapOf(
+        "Ocean" to listOf(
+            MaterialTheme.colorScheme.surfaceVariant,
+            Color(0xFF3B82F6).copy(alpha = 0.4f),
+            Color(0xFF8B5CF6).copy(alpha = 0.7f),
+            Color(0xFFF59E0B).copy(alpha = 0.85f),
+            Color(0xFF10B981)
+        ),
+        "Fire" to listOf(
+            MaterialTheme.colorScheme.surfaceVariant,
+            Color(0xFFFBBF24).copy(alpha = 0.4f),
+            Color(0xFFF59E0B).copy(alpha = 0.7f),
+            Color(0xFFEA580C).copy(alpha = 0.85f),
+            Color(0xFFE11D48)
+        ),
+        "Forest" to listOf(
+            MaterialTheme.colorScheme.surfaceVariant,
+            Color(0xFF6EE7B7).copy(alpha = 0.4f),
+            Color(0xFF10B981).copy(alpha = 0.7f),
+            Color(0xFF059669).copy(alpha = 0.85f),
+            Color(0xFF047857)
+        ),
+        "Sunset" to listOf(
+            MaterialTheme.colorScheme.surfaceVariant,
+            Color(0xFFF472B6).copy(alpha = 0.4f),
+            Color(0xFFEC4899).copy(alpha = 0.7f),
+            Color(0xFFD946EF).copy(alpha = 0.85f),
+            Color(0xFFA855F7)
+        )
+    )
+    var selectedTheme by remember { mutableStateOf("Ocean") }
+    val currentPalette = themes[selectedTheme] ?: themes["Ocean"]!!
+
+    
+ // "Column", "Line"
     var selectedHourDetails by remember { mutableStateOf<Pair<Int, Float>?>(null) }
 
     // 24-hour activity computation across 00:00 to 23:00
@@ -234,11 +270,11 @@ fun AgentActivityHeatmapWidget(
                     val intensityRatio = if (maxActivity > 0) (count / maxActivity).coerceIn(0f, 1f) else 0f
 
                     val heatColor = when {
-                        count == 0f -> MaterialTheme.colorScheme.surfaceVariant
-                        intensityRatio < 0.25f -> Color(0xFF3B82F6).copy(alpha = 0.4f)
-                        intensityRatio < 0.60f -> Color(0xFF8B5CF6).copy(alpha = 0.7f)
-                        intensityRatio < 0.85f -> Color(0xFFF59E0B).copy(alpha = 0.85f)
-                        else -> Color(0xFF10B981)
+                        count == 0f -> currentPalette[0]
+                        intensityRatio < 0.25f -> currentPalette[1]
+                        intensityRatio < 0.60f -> currentPalette[2]
+                        intensityRatio < 0.85f -> currentPalette[3]
+                        else -> currentPalette[4]
                     }
 
                     Box(

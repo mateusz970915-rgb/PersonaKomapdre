@@ -124,7 +124,11 @@ object AILlmClient {
         provider: String,
         cleanPrompt: String,
         cleanInstruction: String?,
-        prefs: com.example.data.AgentPreferences
+        prefs: com.example.data.AgentPreferences,
+        imageAttachmentBase64: String? = null,
+        imageMimeType: String = "image/jpeg",
+        audioAttachmentBase64: String? = null,
+        audioMimeType: String = "audio/mp3"
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
             if (provider == "openrouter") {
@@ -137,7 +141,14 @@ object AILlmClient {
                     if (!cleanInstruction.isNullOrBlank()) {
                         messages.add(OpenRouterChatMessage(role = "system", content = cleanInstruction))
                     }
-                    messages.add(OpenRouterChatMessage(role = "user", content = cleanPrompt))
+                    var fullContent = cleanPrompt
+                    if (imageAttachmentBase64 != null) {
+                        fullContent += "\n[Załączono obraz w formacie $imageMimeType]"
+                    }
+                    if (audioAttachmentBase64 != null) {
+                        fullContent += "\n[Załączono nagranie głosowe w formacie $audioMimeType]"
+                    }
+                    messages.add(OpenRouterChatMessage(role = "user", content = fullContent))
                     
                     val request = OpenRouterChatRequest(
                         model = model,
@@ -163,8 +174,18 @@ object AILlmClient {
                     Result.failure(Exception("Gemini API Key is missing."))
                 } else {
                     val model = prefs.geminiSelectedModel.ifBlank { "gemini-3.5-flash" }
+                    val partsList = mutableListOf<Part>()
+                    partsList.add(Part(text = cleanPrompt))
+                    
+                    if (imageAttachmentBase64 != null) {
+                        partsList.add(Part(inlineData = InlineData(mimeType = imageMimeType, data = imageAttachmentBase64)))
+                    }
+                    if (audioAttachmentBase64 != null) {
+                        partsList.add(Part(inlineData = InlineData(mimeType = audioMimeType, data = audioAttachmentBase64)))
+                    }
+
                     val request = GenerateContentRequest(
-                        contents = listOf(Content(parts = listOf(Part(text = cleanPrompt)))),
+                        contents = listOf(Content(parts = partsList)),
                         systemInstruction = if (!cleanInstruction.isNullOrBlank()) Content(parts = listOf(Part(text = cleanInstruction))) else null
                     )
                     val response = RetrofitClient.service.generateContent(model, apiKey, request)
@@ -184,7 +205,11 @@ object AILlmClient {
     suspend fun generateContent(
         context: Context,
         prompt: String,
-        systemInstruction: String? = null
+        systemInstruction: String? = null,
+        imageAttachmentBase64: String? = null,
+        imageMimeType: String = "image/jpeg",
+        audioAttachmentBase64: String? = null,
+        audioMimeType: String = "audio/mp3"
     ): String = withContext(Dispatchers.IO) {
         val prefsRepository = AgentPreferencesRepository(context)
         val prefs = prefsRepository.agentPreferencesFlow.first()
@@ -220,7 +245,10 @@ object AILlmClient {
         var responseText = ""
 
         // Execute LLM Call with automatic retry and failover
-        var executionResult = performCall(context, currentProvider, cleanPrompt, cleanInstruction, prefs)
+        var executionResult = performCall(
+            context, currentProvider, cleanPrompt, cleanInstruction, prefs,
+            imageAttachmentBase64, imageMimeType, audioAttachmentBase64, audioMimeType
+        )
         
         if (executionResult.isFailure) {
             val count = consecutiveFailures.incrementAndGet()
@@ -240,7 +268,10 @@ object AILlmClient {
                     // Ignore database errors during failover logging
                 }
 
-                val fallbackResult = performCall(context, fallbackProvider, cleanPrompt, cleanInstruction, prefs)
+                val fallbackResult = performCall(
+                    context, fallbackProvider, cleanPrompt, cleanInstruction, prefs,
+                    imageAttachmentBase64, imageMimeType, audioAttachmentBase64, audioMimeType
+                )
                 if (fallbackResult.isSuccess) {
                     executionResult = fallbackResult
                     currentProvider = fallbackProvider

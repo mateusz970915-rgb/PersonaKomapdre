@@ -96,7 +96,7 @@ fun PrivacyDiagnosticScreen(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
                     text = { Text("Logi Dostępów", fontSize = 12.sp) },
-                    icon = { Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, modifier = Modifier.size(18.dp)) }
                 )
                 Tab(
                     selected = selectedTab == 1,
@@ -143,7 +143,7 @@ fun PrivacyDiagnosticScreen(
 
                         Button(
                             onClick = {
-                                viewModel.insertTestApprovalRequest()
+                                viewModel.triggerPrivacyAudit()
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -153,7 +153,7 @@ fun PrivacyDiagnosticScreen(
                         ) {
                             Icon(Icons.Filled.Shield, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Wygeneruj testowe żądanie autoryzacji")
+                            Text("Trigger Agent Privacy Audit")
                         }
 
                         Row(

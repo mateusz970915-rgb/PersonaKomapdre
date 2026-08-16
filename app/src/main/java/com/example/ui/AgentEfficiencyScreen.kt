@@ -76,6 +76,8 @@ fun AgentEfficiencyScreen(
     val dataAccessRequests by viewModel.dataAccessRequests.collectAsState()
     val interAgentMessages by viewModel.interAgentMessages.collectAsState()
     val completedTasksList by viewModel.completedSubTasks.collectAsState()
+    val annotations by viewModel.chartAnnotations.collectAsState()
+    val selectedOverlayAgents by viewModel.selectedOverlayAgents.collectAsState()
 
     var selectedAgentId by remember { mutableStateOf<Int?>(null) }
 
@@ -138,6 +140,25 @@ fun AgentEfficiencyScreen(
                 decisionsCount = decisions.size,
                 missionsCount = missions.count { it.status.equals("Completed", ignoreCase = true) },
                 completedTasksList = completedTasksList
+            )
+
+            // Section 2.6: Multi-Agent Overlay Analytics (Features 2, 3, 4, 5)
+            MultiAgentOverlayChartWidget(
+                agents = agents,
+                subTasks = subTasks,
+                decisions = decisions,
+                annotations = annotations,
+                selectedOverlayAgents = selectedOverlayAgents,
+                onToggleOverlayAgent = { viewModel.toggleOverlayAgent(it) },
+                onAddAnnotation = { note, tag, colorHex -> viewModel.addChartAnnotation(note, tag, colorHex) },
+                onDeleteAnnotation = { viewModel.deleteChartAnnotation(it) },
+                onGeneratePdfReport = { bmp -> viewModel.generatePdfReport(bmp) }
+            )
+
+            // Section 2.7: Activity Heatmap (GitHub Style Contribution Grid) (Feature 5)
+            ActivityHeatmapGrid(
+                subTasks = subTasks,
+                decisions = decisions
             )
 
             // Section 3: Tasks Completed per Agent (Vico Chart)

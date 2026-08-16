@@ -2,5 +2,5 @@
   "name": "PersonaMesh",
   "description": "A personal colony of agents living in Android, managing your digital life collectively.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API", "MAJOR_CAPABILITY_ON_DEVICE_LOCAL_AI"]
 }

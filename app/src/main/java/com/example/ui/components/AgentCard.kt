@@ -5,6 +5,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import kotlinx.coroutines.delay
 import coil.compose.AsyncImage
+import com.patrykandpatrick.vico.compose.chart.Chart
+import com.patrykandpatrick.vico.compose.chart.line.lineChart
+import com.patrykandpatrick.vico.compose.chart.column.columnChart
+import com.patrykandpatrick.vico.core.entry.entryModelOf
+import com.patrykandpatrick.vico.compose.axis.horizontal.rememberBottomAxis
+import com.patrykandpatrick.vico.compose.axis.vertical.rememberStartAxis
 
 
 import androidx.compose.animation.*
@@ -47,10 +53,17 @@ fun AgentCard(
     onTap: () -> Unit,
     onPauseToggle: () -> Unit,
     onDelete: () -> Unit,
-    onExport: () -> Unit = {}
+    onExport: () -> Unit = {},
+    onAvatarClick: () -> Unit = {},
+    onUpdateAgent: (Agent) -> Unit = {},
+    onViewHistory: () -> Unit = {},
+    avatarTheme: String = "Default"
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }
+    var showTagsDialog by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
 
     val parsedCatColor = remember(categoryColorHex) {
         try {
@@ -96,12 +109,22 @@ fun AgentCard(
         label = "alpha"
     )
 
+    val priority = try { org.json.JSONObject(agent.configurationJson).optString("priority", "Normal") } catch (e: Exception) { "Normal" }
+    
+    val borderColor = when (priority) {
+        "High" -> Color(0xFFEF4444)
+        "Medium" -> Color(0xFFF59E0B)
+        "Low" -> Color(0xFF9CA3AF)
+        else -> parsedCatColor.copy(alpha = 0.5f)
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
                 onClick = { 
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    expanded = !expanded
                     onTap() 
                 },
                 onLongClick = { 
@@ -125,7 +148,7 @@ fun AgentCard(
         border = if (isSelected) {
             androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
         } else {
-            androidx.compose.foundation.BorderStroke(1.5.dp, parsedCatColor.copy(alpha = 0.5f))
+            androidx.compose.foundation.BorderStroke(1.5.dp, borderColor)
         }
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
@@ -194,7 +217,54 @@ fun AgentCard(
                         )
                     }
                 )
-            DropdownMenuItem(text={Text("Export Agent")},onClick={onExport();showMenu=false},leadingIcon={Icon(imageVector=Icons.Default.Share,contentDescription=null)})
+                DropdownMenuItem(
+                    text = { Text("Share Metadata") },
+                    onClick = {
+                        val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(android.content.Intent.EXTRA_SUBJECT, "Agent: ${agent.name}")
+                            putExtra(android.content.Intent.EXTRA_TEXT, "Agent: ${agent.name}\nRole: ${agent.role}\nType: ${agent.type}\nStatus: ${agent.status}\nTraits: ${agent.traits}")
+                        }
+                        context.startActivity(android.content.Intent.createChooser(shareIntent, "Share Agent Metadata"))
+                        showMenu = false
+                    },
+                    leadingIcon = { Icon(imageVector = Icons.Default.Share, contentDescription = null) }
+                )
+                DropdownMenuItem(
+                    text = { Text("Task History") },
+                    onClick = {
+                        onViewHistory()
+                        showMenu = false
+                    },
+                    leadingIcon = { Icon(imageVector = Icons.Default.History, contentDescription = null) }
+                )
+                DropdownMenuItem(
+                    text = { Text("Set Priority") },
+                    onClick = {
+                        val priorities = listOf("Normal", "Low", "Medium", "High")
+                        val currentPriority = try { org.json.JSONObject(agent.configurationJson).optString("priority", "Normal") } catch (e: Exception) { "Normal" }
+                        val nextIdx = (priorities.indexOf(currentPriority) + 1) % priorities.size
+                        val nextPriority = priorities[if (nextIdx < 0) 0 else nextIdx]
+                        val configObj = try { org.json.JSONObject(agent.configurationJson) } catch (e: Exception) { org.json.JSONObject() }
+                        configObj.put("priority", nextPriority)
+                        onUpdateAgent(agent.copy(configurationJson = configObj.toString()))
+                        showMenu = false
+                    },
+                    leadingIcon = { Icon(imageVector = Icons.Default.Star, contentDescription = null) }
+                )
+                DropdownMenuItem(
+                    text = { Text("Edit Tags") },
+                    onClick = {
+                        showTagsDialog = true
+                        showMenu = false
+                    },
+                    leadingIcon = { Icon(imageVector = Icons.Default.Label, contentDescription = null) }
+                )
+                DropdownMenuItem(
+                    text = { Text("Export Backup") },
+                    onClick = { onExport(); showMenu = false },
+                    leadingIcon = { Icon(imageVector = Icons.Filled.FileDownload, contentDescription = null) }
+                )
             }
 
             Column(
@@ -203,7 +273,10 @@ fun AgentCard(
                     .padding(top = 28.dp, bottom = 16.dp, start = 16.dp, end = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Box(contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.clickable { onAvatarClick() },
+                    contentAlignment = Alignment.Center
+                ) {
                     if (agent.avatarUrl.isNotBlank()) {
                         coil.compose.AsyncImage(
                             model = agent.avatarUrl,
@@ -237,13 +310,13 @@ fun AgentCard(
                         }
                     }
                     
-                    // Status Dot with pulse ring behind it if Working
+                    // Status Dot with pulse ring behind it if Working or Active
                     Box(
                         modifier = Modifier
                             .size(12.dp)
                             .align(Alignment.BottomEnd)
                     ) {
-                        if (statusText == "Busy") {
+                        if (statusText == "Busy" || agent.status == "Active") {
                             Box(
                                 modifier = Modifier
                                     .size(12.dp)
@@ -318,25 +391,57 @@ fun AgentCard(
                         )
                     }
                 }
+                
+                if (agent.traits.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    @OptIn(ExperimentalLayoutApi::class)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        val tags = agent.traits.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                        tags.forEach { tag ->
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = tag,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
+                Surface(
+                    color = dotColor.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(dotColor)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = statusText,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = dotColor
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(dotColor)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = dotColor
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -407,7 +512,196 @@ fun AgentCard(
                         }
                     }
                 }
+                
+                // Expandable Section
+                AnimatedVisibility(
+                    visible = expanded,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp)
+                    ) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(bottom = 8.dp),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                        )
+                        
+                        Text(
+                            text = "Configuration",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Role: ${agent.role}\nType: ${agent.type}\nAutonomy: ${agent.autonomyLevel}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (agent.systemPrompt.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "System Prompt: ${agent.systemPrompt.take(60)}...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Text(
+                            text = "Performance Metrics",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        
+                        val performancePercent = (agent.performanceScore * 100).toInt()
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "Success Rate",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "$performancePercent%",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (agent.performanceScore > 0.7f) Color(0xFF4CAF50) else Color(0xFFFF9800)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        LinearProgressIndicator(
+                            progress = { agent.performanceScore },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp)),
+                            color = if (agent.performanceScore > 0.7f) Color(0xFF4CAF50) else Color(0xFFFF9800),
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                        
+                        if (subTasks.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Tasks Assigned: ${subTasks.count { it.assignedAgent.equals(agent.name, ignoreCase = true) }}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Interaction Frequency (7 Days)",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Real task data over 7 days for bar chart
+                        val chartEntryModel = remember(agent.id, subTasks) {
+                            val now = System.currentTimeMillis()
+                            val oneDay = 24 * 60 * 60 * 1000L
+                            val entries = FloatArray(7) { 0f }
+                            for (i in 0..6) {
+                                val start = now - (7 - i) * oneDay
+                                val end = now - (6 - i) * oneDay
+                                val count = subTasks.count { 
+                                    it.assignedAgent.equals(agent.name, ignoreCase = true) && 
+                                    (it.completedAt in start..end || it.timestamp in start..end)
+                                }
+                                entries[i] = count.toFloat()
+                            }
+                            entryModelOf(entries[0], entries[1], entries[2], entries[3], entries[4], entries[5], entries[6])
+                        }
+                        
+                        ChartContainerWithEmptyState(
+                            hasData = !chartEntryModel.isZeroOrEmpty(),
+                            emptyTitle = "No Recent Activity",
+                            emptyMessage = "Agent hasn't completed tasks in the last 7 days.",
+                            emptyStateHeight = 120.dp
+                        ) {
+                            Chart(
+                                chart = columnChart(),
+                                model = chartEntryModel,
+                                startAxis = rememberStartAxis(),
+                                bottomAxis = rememberBottomAxis(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(120.dp)
+                                    .padding(horizontal = 8.dp)
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        val context = LocalContext.current
+                        OutlinedButton(
+                            onClick = {
+                                val logContent = """
+                                    Agent: ${agent.name}
+                                    Role: ${agent.role}
+                                    Type: ${agent.type}
+                                    Autonomy: ${agent.autonomyLevel}
+                                    Success Rate: $performancePercent%
+                                    Tasks Assigned: ${subTasks.count { it.assignedAgent.equals(agent.name, ignoreCase = true) }}
+                                """.trimIndent()
+                                try {
+                                    val file = java.io.File(context.filesDir, "agent_${agent.id}_metrics.txt")
+                                    file.writeText(logContent)
+                                    android.widget.Toast.makeText(context, "Logs exported to ${file.name}", android.widget.Toast.LENGTH_LONG).show()
+                                } catch (e: Exception) {
+                                    android.widget.Toast.makeText(context, "Failed to export logs", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Filled.FileDownload, contentDescription = "Export Logs")
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Export Logs")
+                        }
+                    }
+                }
             }
         }
+    }
+
+    if (showTagsDialog) {
+        var tagsText by remember { mutableStateOf(agent.traits) }
+        AlertDialog(
+            onDismissRequest = { showTagsDialog = false },
+            title = { Text("Edit Personality Tags") },
+            text = {
+                OutlinedTextField(
+                    value = tagsText,
+                    onValueChange = { tagsText = it },
+                    label = { Text("Tags (comma separated)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onUpdateAgent(agent.copy(traits = tagsText.trim()))
+                    showTagsDialog = false
+                }) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTagsDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

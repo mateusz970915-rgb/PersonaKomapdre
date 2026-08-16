@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.*
@@ -27,11 +28,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.filled.ManageSearch
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import com.example.ui.components.ChartColorThemeSelector
 import com.example.viewmodel.ChatViewModel
 import com.example.viewmodel.ColonyViewModel
 import java.text.SimpleDateFormat
@@ -108,6 +113,69 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            val themeScope = rememberCoroutineScope()
+            // UI & Context Theme Card
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("theme_settings_card"),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Palette,
+                                contentDescription = "Theme",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "UI & Context Theme",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Select a theme context:", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    val themes = listOf(
+                        "Default" to "System Default",
+                        "Zen" to "Personal (Zen)",
+                        "DeepFocus" to "Work (Deep Focus)",
+                        "Creative" to "Creative Flow"
+                    )
+                    
+                    themes.forEach { (mode, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    themeScope.launch { viewModel.updateThemeMode(mode) }
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = agentPrefs.themeMode == mode,
+                                onClick = {
+                                    themeScope.launch { viewModel.updateThemeMode(mode) }
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+
             // OpenRouter & AI Provider Selection Card
             val openRouterModels by chatViewModel.openRouterFreeModels.collectAsState()
             val isLoadingModels by chatViewModel.isLoadingOpenRouterModels.collectAsState()
@@ -591,6 +659,546 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error
                         )
+                    }
+                }
+            }
+
+            // Global AI Agent Settings Card (DataStore Preferences)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("global_agent_settings_card"),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Global User Preferences",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "Primary Language:",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val languages = listOf("English", "Polish", "Spanish", "German")
+                        languages.forEach { lang ->
+                            FilterChip(
+                                selected = agentPrefs.primaryLanguage == lang,
+                                onClick = { viewModel.updatePrimaryLanguage(lang) },
+                                label = { Text(lang) },
+                                leadingIcon = {
+                                    if (agentPrefs.primaryLanguage == lang) {
+                                        Icon(Icons.Default.Check, contentDescription = null)
+                                    }
+                                },
+                                modifier = Modifier.testTag("lang_chip_$lang")
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Global Autonomy Threshold:",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val levels = listOf("Autonomous", "Semi-Autonomous", "Strict Approval")
+                        levels.forEach { level ->
+                            FilterChip(
+                                selected = agentPrefs.globalAutonomyThreshold == level,
+                                onClick = { viewModel.updateGlobalAutonomyThreshold(level) },
+                                label = { Text(level) },
+                                modifier = Modifier.testTag("autonomy_chip_$level")
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Toggle 1: Automatic Updates
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Automatic Updates",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Automatically sync agent status & model capabilities in background via WorkManager",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = agentPrefs.autoUpdatesEnabled,
+                            onCheckedChange = { viewModel.updateAutoUpdatesEnabled(it) },
+                            modifier = Modifier.testTag("auto_updates_switch")
+                        )
+                    }
+                    if (agentPrefs.autoUpdatesEnabled) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        OutlinedButton(
+                            onClick = { viewModel.triggerAgentDataSync() },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("btn_trigger_agent_data_sync_now")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Sync Agent Data Now",
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Sync Agent Data & Models Now (WorkManager)")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Database Cleanup & Retention Policy Section (Feature 6)
+                    Text(
+                        text = "Automatyczne Czyszczenie i Archiwizacja Bazy (DatabaseCleanupWorker)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Konfiguracja okresu przechowywania logów i telemetrii (Retention Policy):",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val retentionOptions = listOf(7, 14, 30, 90, 180)
+                        retentionOptions.forEach { days ->
+                            FilterChip(
+                                selected = agentPrefs.retentionPolicyDays == days,
+                                onClick = { viewModel.updateRetentionPolicyDays(days) },
+                                label = { Text("${days}d") },
+                                modifier = Modifier.testTag("retention_chip_${days}d")
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Automatyczna Archiwizacja",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Zapisuj wyczyszczone wpisy w lokalnym pliku plikowej archiwum JSON przed usunięciem.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = agentPrefs.autoArchivingEnabled,
+                            onCheckedChange = { viewModel.updateAutoArchivingEnabled(it) },
+                            modifier = Modifier.testTag("auto_archiving_switch")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = {
+                            viewModel.triggerDatabaseCleanupNow()
+                            android.widget.Toast.makeText(context, "Uruchomiono DatabaseCleanupWorker w tle!", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("btn_trigger_database_cleanup_now")
+                    ) {
+                        Icon(Icons.Default.CleaningServices, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Uruchom Czyszczenie i Archiwizację Bazy Teraz")
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            // FTS Search navigation or quick alert
+                            android.widget.Toast.makeText(context, "Przejdź do wyszukiwarki FTS5 z poziomu ekranu Analityki!", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("btn_fts_search")
+                    ) {
+                        Icon(Icons.Default.ManageSearch, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Wyszukiwarka Logów FTS5 (Pełnotekstowa)")
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Toggle 2: Notifications
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Agent Notifications",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Receive system notifications when agents trigger milestone events",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = agentPrefs.notificationsEnabled,
+                            onCheckedChange = { viewModel.updateNotificationsEnabled(it) },
+                            modifier = Modifier.testTag("notifications_switch")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Toggle 3: Background Execution
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Background Execution",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Allow AI processes to continue running when screen is locked",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = agentPrefs.allowBackgroundExecution,
+                            onCheckedChange = { viewModel.updateAllowBackgroundExecution(it) },
+                            modifier = Modifier.testTag("bg_execution_switch")
+                        )
+                    }
+                }
+            }
+
+            // Agent Communication & Inter-Agent Messaging Settings Card (DataStore Preferences)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("agent_communication_settings_card"),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Agent Communication & Mesh Toggles",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Toggle 1: Agent-to-Agent Communication
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Agent-to-Agent Messaging",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Allow AI agents to directly send signals & coordinate with each other",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = agentPrefs.allowAgentCommunication,
+                            onCheckedChange = { viewModel.updateAllowAgentCommunication(it) },
+                            modifier = Modifier.testTag("allow_agent_comm_switch")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Toggle 2: Mesh Broadcasts
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Mesh Network Broadcasts",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Allow colony-wide system broadcasts for global status synchronization",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = agentPrefs.allowMeshBroadcasts,
+                            onCheckedChange = { viewModel.updateAllowMeshBroadcasts(it) },
+                            modifier = Modifier.testTag("allow_mesh_broadcasts_switch")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Toggle 3: Message Encryption
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "End-to-End Encryption",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Enforce cryptographic signing for all inter-agent messages",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = agentPrefs.encryptAgentMessages,
+                            onCheckedChange = { viewModel.updateEncryptAgentMessages(it) },
+                            modifier = Modifier.testTag("encrypt_messages_switch")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Toggle 4: Cross-Colony Remote Syncing
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Cross-Colony Remote Syncing",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Allow agent communication with remote peer colonies",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = agentPrefs.allowCrossColonySync,
+                            onCheckedChange = { viewModel.updateAllowCrossColonySync(it) },
+                            modifier = Modifier.testTag("cross_colony_sync_switch")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Toggle 5: Security Audit Logging
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Security Audit Logging",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Log all agent communication attempts to local audit ledger",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = agentPrefs.logAgentCommunication,
+                            onCheckedChange = { viewModel.updateLogAgentCommunication(it) },
+                            modifier = Modifier.testTag("log_comm_switch")
+                        )
+                    }
+                }
+            }
+
+            // Failover Agent Configuration Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("failover_agent_config_card"),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Cloud,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Konfiguracja Agenta Failover (Zastępczego)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Wybierz głównego agenta, przypisz mu agenta rezerwowego oraz maksymalny progu opóźnienia response latency.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    val allAgentsList by viewModel.agents.collectAsState()
+                    var primaryAgentId by remember { mutableStateOf<Int?>(allAgentsList.firstOrNull()?.id) }
+                    var backupAgentId by remember { mutableStateOf<Int?>(null) }
+                    var latencyThresholdText by remember { mutableStateOf("5000") }
+
+                    if (allAgentsList.isNotEmpty()) {
+                        Text("Główny Agent:", style = MaterialTheme.typography.labelMedium)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        ) {
+                            allAgentsList.take(3).forEach { ag ->
+                                FilterChip(
+                                    selected = primaryAgentId == ag.id,
+                                    onClick = { primaryAgentId = ag.id },
+                                    label = { Text(ag.name) }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Agent Rezerwowy (Failover):", style = MaterialTheme.typography.labelMedium)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        ) {
+                            FilterChip(
+                                selected = backupAgentId == null,
+                                onClick = { backupAgentId = null },
+                                label = { Text("Brak") }
+                            )
+                            allAgentsList.filter { it.id != primaryAgentId }.take(3).forEach { ag ->
+                                FilterChip(
+                                    selected = backupAgentId == ag.id,
+                                    onClick = { backupAgentId = ag.id },
+                                    label = { Text(ag.name) }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = latencyThresholdText,
+                            onValueChange = { latencyThresholdText = it },
+                            label = { Text("Próg Opóźnienia (ms)") },
+                            modifier = Modifier.fillMaxWidth().testTag("failover_latency_input")
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                val primaryId = primaryAgentId
+                                val threshold = latencyThresholdText.toLongOrNull() ?: 5000L
+                                if (primaryId != null) {
+                                    viewModel.updateAgentFailoverConfig(primaryId, backupAgentId, threshold)
+                                    android.widget.Toast.makeText(context, "Zapisano konfigurację Failover!", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().testTag("btn_save_failover_config")
+                        ) {
+                            Text("Zapisz Konfigurację Failover")
+                        }
+                    } else {
+                        Text("Brak aktywnych agentów do skonfigurowania.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -1255,6 +1863,90 @@ fun SettingsScreen(
                 }
             }
             
+            // Chart Styling & Trend Alerts Section
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("chart_settings_card"),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Chart Visuals & Trend Threshold Alerts", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "Customize chart color contrast modes and set automated notifications for significant data trend shifts.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Color Theme Preference
+                    Text("Chart Color Theme", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    ChartColorThemeSelector(
+                        selectedTheme = agentPrefs.chartColorIntensity,
+                        onThemeSelected = { viewModel.updateChartColorIntensity(it) }
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Trend Alerts Switch
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Trend Shift Notifications", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "Receive system alerts when interaction volume or activity shifts significantly.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = agentPrefs.trendAlertsEnabled,
+                            onCheckedChange = { viewModel.updateTrendAlertsEnabled(it) },
+                            modifier = Modifier.testTag("trend_alerts_toggle_switch")
+                        )
+                    }
+
+                    if (agentPrefs.trendAlertsEnabled) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Notification Threshold: ±${agentPrefs.trendAlertThreshold}%",
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Slider(
+                            value = agentPrefs.trendAlertThreshold.toFloat(),
+                            onValueChange = { viewModel.updateTrendAlertThreshold(it.toInt()) },
+                            valueRange = 5f..50f,
+                            steps = 8,
+                            modifier = Modifier.testTag("settings_trend_threshold_slider")
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(10, 15, 20, 30, 50).forEach { preset ->
+                                FilterChip(
+                                    selected = agentPrefs.trendAlertThreshold == preset,
+                                    onClick = { viewModel.updateTrendAlertThreshold(preset) },
+                                    label = { Text("$preset%") }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Calendar Integration & Sandbox section
             Card(
                 modifier = Modifier.fillMaxWidth().testTag("calendar_section_card"),

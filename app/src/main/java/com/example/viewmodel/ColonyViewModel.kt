@@ -28,10 +28,13 @@ import com.example.network.RetrofitClient
 import com.example.network.ThinkingConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -42,6 +45,8 @@ import com.example.utils.NotificationHelper
 import kotlinx.serialization.json.JsonObject
 
 class ColonyViewModel(application: Application) : BaseAgentViewModel(application) {
+    val personaPreferences = com.example.data.PersonaMeshPreferences(application)
+
     private val repository: ColonyRepository = baseRepository
     
     val agents: StateFlow<List<Agent>>
@@ -67,8 +72,67 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
     val financeTransactions: StateFlow<List<com.example.data.FinanceTransaction>>
     val customAgentDefinitions: StateFlow<List<com.example.data.CustomAgentDefinition>>
     val flashcards: StateFlow<List<com.example.data.Flashcard>>
+    val interactionLogger = com.example.data.AgentInteractionLogger(application)
+    val allInteractions: StateFlow<List<com.example.data.InteractionRecord>> = interactionLogger.getAllInteractions().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val subscriptions: StateFlow<List<com.example.data.Subscription>>
     val sleepRecords: StateFlow<List<com.example.data.SleepRecord>>
+
+    val chartAnnotations: StateFlow<List<com.example.data.ChartAnnotation>> = repository.colonyDao.getAllChartAnnotations().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val allFtsContent: StateFlow<List<com.example.data.AgentInteractionFtsContent>> = repository.colonyDao.getAllFtsContent().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val selfHealingProposals: StateFlow<List<com.example.data.SelfHealingProposal>> = repository.colonyDao.getAllSelfHealingProposals().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val workflowDags: StateFlow<List<com.example.data.WorkflowDag>> = repository.colonyDao.getAllWorkflowDags().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val colonyProfiles: StateFlow<List<com.example.data.ColonyProfile>> = repository.colonyDao.getAllColonyProfiles().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val vectorEmbeddingLogs: StateFlow<List<com.example.data.VectorEmbeddingLog>> = repository.colonyDao.getAllVectorEmbeddingLogs().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val hallucinationAuditLogs: StateFlow<List<com.example.data.HallucinationAuditLog>> = repository.colonyDao.getAllHallucinationAuditLogs().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _isPrivateModeGemmaEnabled = MutableStateFlow(false)
+    val isPrivateModeGemmaEnabled: StateFlow<Boolean> = _isPrivateModeGemmaEnabled
+
+    fun togglePrivateModeGemma(enabled: Boolean) {
+        _isPrivateModeGemmaEnabled.value = enabled
+    }
+
+    
+    private val _ftsSearchResults = MutableStateFlow<List<com.example.data.AgentInteractionFtsContent>>(emptyList())
+    val ftsSearchResults: StateFlow<List<com.example.data.AgentInteractionFtsContent>> = _ftsSearchResults
+
+    private val _ftsSearchQuery = MutableStateFlow("")
+    val ftsSearchQuery: StateFlow<String> = _ftsSearchQuery
+
+    private val _selectedOverlayAgents = MutableStateFlow<Set<String>>(emptySet())
+    val selectedOverlayAgents: StateFlow<Set<String>> = _selectedOverlayAgents
+
+    private val _generatedPdfUri = MutableStateFlow<android.net.Uri?>(null)
+    val generatedPdfUri: StateFlow<android.net.Uri?> = _generatedPdfUri
+
+    val syncStatus: StateFlow<String> = androidx.work.WorkManager.getInstance(application)
+        .getWorkInfosForUniqueWorkFlow("ExportDatabaseWork")
+        .map { workInfos ->
+            val info = workInfos.firstOrNull()
+            when (info?.state) {
+                androidx.work.WorkInfo.State.ENQUEUED -> "Pending"
+                androidx.work.WorkInfo.State.RUNNING -> "Syncing"
+                androidx.work.WorkInfo.State.SUCCEEDED -> "Synced"
+                androidx.work.WorkInfo.State.FAILED -> "Failed"
+                else -> "Unknown"
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Unknown")
+
+    val agentDataSyncStatus: StateFlow<String> = androidx.work.WorkManager.getInstance(application)
+        .getWorkInfosForUniqueWorkFlow("AgentDataSyncWork")
+        .map { workInfos ->
+            val info = workInfos.firstOrNull()
+            when (info?.state) {
+                androidx.work.WorkInfo.State.ENQUEUED -> "Pending"
+                androidx.work.WorkInfo.State.RUNNING -> "Syncing"
+                androidx.work.WorkInfo.State.SUCCEEDED -> "Synced"
+                androidx.work.WorkInfo.State.FAILED -> "Failed"
+                else -> "Idle"
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Idle")
 
 
     private val defaultCategoryColors = mapOf(
@@ -117,6 +181,22 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
     private val _newlyUnlockedAgentMilestone = MutableStateFlow<com.example.data.AgentMilestone?>(null)
     val newlyUnlockedAgentMilestone: StateFlow<com.example.data.AgentMilestone?> = _newlyUnlockedAgentMilestone
 
+    private val _dbIntegrityOk = MutableStateFlow(true)
+    val dbIntegrityOk: StateFlow<Boolean> = _dbIntegrityOk
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            _dbIntegrityOk.value = repository.checkDatabaseIntegrity()
+        }
+    }
+
+    fun resetDatabase() {
+        viewModelScope.launch(Dispatchers.IO) {
+            getApplication<Application>().deleteDatabase("colony_database")
+            _dbIntegrityOk.value = true
+        }
+    }
+
     fun dismissUnlockedBadge() {
         _newlyUnlockedBadge.value = null
     }
@@ -131,20 +211,171 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
         }
     }
 
+    // Chart Annotations
+    fun addChartAnnotation(note: String, tag: String = "General", colorHex: String = "#3B82F6", agentId: Int? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.colonyDao.insertChartAnnotation(
+                com.example.data.ChartAnnotation(
+                    note = note,
+                    tag = tag,
+                    colorHex = colorHex,
+                    agentId = agentId
+                )
+            )
+        }
+    }
+
+    fun deleteChartAnnotation(id: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.colonyDao.deleteChartAnnotation(id)
+        }
+    }
+
+    // FTS5 Full Text Search
+    fun searchFts(query: String) {
+        _ftsSearchQuery.value = query
+        if (query.isBlank()) {
+            _ftsSearchResults.value = emptyList()
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Formatting query for FTS MATCH syntax
+                val formattedQuery = "*$query*"
+                repository.colonyDao.searchFtsInteractions(formattedQuery).collect { list ->
+                    _ftsSearchResults.value = list
+                }
+            } catch (e: Exception) {
+                Log.w("ColonyViewModel", "FTS Search Error: ${e.message}")
+            }
+        }
+    }
+
+    fun insertFtsInteraction(agentName: String, snippet: String, modelUsed: String = "gemini-3.5-flash", tag: String = "Conversation") {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.colonyDao.insertFtsContent(
+                com.example.data.AgentInteractionFtsContent(
+                    agentName = agentName,
+                    snippet = snippet,
+                    modelUsed = modelUsed,
+                    tag = tag
+                )
+            )
+        }
+    }
+
+    // Multi-Agent Overlay Selection
+    fun toggleOverlayAgent(agentName: String) {
+        val current = _selectedOverlayAgents.value.toMutableSet()
+        if (current.contains(agentName)) {
+            current.remove(agentName)
+        } else {
+            current.add(agentName)
+        }
+        _selectedOverlayAgents.value = current
+    }
+
+    // Database Retention & Preferences Updates
+    fun updateRetentionPolicyDays(days: Int) {
+        viewModelScope.launch {
+            preferencesRepository.updateRetentionPolicyDays(days)
+        }
+    }
+
+    fun updateAutoArchivingEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.updateAutoArchivingEnabled(enabled)
+        }
+    }
+
+    // Failover Configuration Update
+    fun updateAgentFailoverConfig(agentId: Int, failoverAgentId: Int?, maxLatencyMs: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.colonyDao.updateAgentFailoverConfig(agentId, failoverAgentId, maxLatencyMs)
+        }
+    }
+
+    // Trigger Database Cleanup Worker
+    fun triggerDatabaseCleanupNow() {
+        val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.example.worker.DatabaseCleanupWorker>().build()
+        androidx.work.WorkManager.getInstance(getApplication()).enqueue(workRequest)
+    }
+
+    // Export PDF Report
+    fun generatePdfReport(chartBitmap: Bitmap?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val agentCount = agents.value.size
+            val activeMissions = missions.value.count { it.status == "In Progress" || it.status == "Active" }
+            val completedTasks = completedSubTasks.value.size
+            val telemetryCount = meshTelemetry.value.size
+
+            val metricsMap = mapOf(
+                "Aktywni Agenci" to "$agentCount",
+                "Misje w Biegu" to "$activeMissions",
+                "Wykonane Zadania" to "$completedTasks",
+                "Pomiary Telemetrii" to "$telemetryCount"
+            )
+
+            val eventLogs = allFtsContent.value.take(100)
+
+            val pdfUri = com.example.utils.PdfReportGenerator.generateReportPdf(
+                context = getApplication(),
+                reportTitle = "Raport Wydajności i Aktywności Agentów EDDE+",
+                chartBitmap = chartBitmap,
+                metrics = metricsMap,
+                eventLogs = eventLogs
+            )
+
+            _generatedPdfUri.value = pdfUri
+        }
+    }
+
+    fun clearGeneratedPdfUri() {
+        _generatedPdfUri.value = null
+    }
+
     fun updateDataAccessApproval(id: Int, status: String) {
         viewModelScope.launch {
             repository.updateDataAccessApproval(id, status)
         }
     }
 
-    fun insertTestApprovalRequest() {
+    fun triggerPrivacyAudit() {
         viewModelScope.launch {
+            val contextApp = getApplication<Application>()
+            val agentList = repository.allAgents.first()
+            if (agentList.isEmpty()) return@launch
+            
+            val agentToAudit = agentList.random()
+            
+            val prompt = """
+                You are a system security auditor. An agent named ${agentToAudit.name} with role ${agentToAudit.role} is requesting a new permission.
+                Propose a plausible risky data access request this agent might make (e.g. "Read SMS", "Access Location").
+                Return the data type requested on line 1.
+                Return a short justification on line 2.
+            """.trimIndent()
+            
+            var dataType = "Odczyt listy kontaktów / kalendarza"
+            var reason = "Zasada bezpieczeństwa 'Polityka Zero Trust' wymaga bezpośredniej zgody użytkownika."
+            
+            try {
+                val reply = com.example.network.AILlmClient.generateContent(contextApp, prompt).trim().lines()
+                if (reply.isNotEmpty()) {
+                    dataType = reply.first()
+                    if (reply.size > 1) {
+                        reason = reply[1]
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            
             repository.insertDataAccessRequest(
                 com.example.data.DataAccessRequest(
-                    agentName = "Sentinel Agent",
-                    dataType = "Odczyt listy kontaktów / kalendarza",
+                    agentName = agentToAudit.name,
+                    dataType = dataType,
                     isPolicyViolation = true,
-                    violationReason = "Zasada bezpieczeństwa 'Polityka Zero Trust' wymaga bezpośredniej zgody użytkownika.",
+                    violationReason = reason,
                     requiresUserApproval = true,
                     approvalStatus = "Pending"
                 )
@@ -180,6 +411,9 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
     private val _predictions = MutableStateFlow<Map<Int, AgentPrediction>>(emptyMap())
     val predictions: StateFlow<Map<Int, AgentPrediction>> = _predictions
     
+    private val _dailySummaryInsight = MutableStateFlow<String>("")
+    val dailySummaryInsight: StateFlow<String> = _dailySummaryInsight
+
     private val _ruleWorkerStatus = MutableStateFlow<String>("Idle")
     val ruleWorkerStatus: StateFlow<String> = _ruleWorkerStatus
 
@@ -465,6 +699,8 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
             
             // Check rest periods
             applyRestPeriods()
+            startHeartbeat()
+            checkInteractionFrequency()
             
             // Perform one-time check on initial agent list safely without infinite flow collection loops
             val currentAgentsList = repository.allAgents.first()
@@ -490,26 +726,36 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
         }
     }
 
+    fun updateAgent(agent: Agent) {
+        viewModelScope.launch {
+            repository.insertAgent(agent)
+        }
+    }
+
     fun updateAgentStatusNotesDirectly(agentId: Int, notes: String) {
         viewModelScope.launch {
             repository.updateAgentStatusNotes(agentId, notes)
         }
     }
 
-    fun generateSimulatedInteractionNote(agentId: Int) {
+    fun generateInteractionNote(agentId: Int) {
         viewModelScope.launch {
             val agent = agents.value.find { it.id == agentId } ?: return@launch
             val otherAgents = agents.value.filter { it.id != agentId }
             val partnerName = if (otherAgents.isNotEmpty()) otherAgents.random().name else "Colony Core"
             
-            val moodSnippets = listOf(
-                "Feeling highly aligned and energized during consensus voting with $partnerName.",
-                "Collaborating smoothly on joint resource allocation and mission planning.",
-                "Exchanged real-time telemetry with $partnerName. Feeling confident in system stability.",
-                "Resolved minor task conflict with $partnerName. Feeling synchronized.",
-                "Feeling calm and focused after successful subtask delegation."
-            )
-            val interactionSnippet = moodSnippets.random()
+            val contextApp = getApplication<Application>()
+            val prompt = """
+                You are ${agent.name} (${agent.role}). Write a brief 1-sentence log note about your recent interaction or collaboration with $partnerName.
+                Express a clear mood (e.g. energized, confident, frustrated). Keep it concise and technical but expressive.
+            """.trimIndent()
+            
+            val interactionSnippet = try {
+                com.example.network.AILlmClient.generateContent(contextApp, prompt).trim()
+            } catch (e: Exception) {
+                "Collaborating smoothly on joint resource allocation with $partnerName."
+            }
+            
             appendAgentStatusNoteSnippet(agentId, interactionSnippet)
         }
     }
@@ -584,6 +830,12 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
         }
     }
 
+    fun toggleAgentFavorite(agent: Agent) {
+        viewModelScope.launch {
+            repository.insertAgent(agent.copy(isFavorite = !agent.isFavorite))
+        }
+    }
+
     fun bulkPauseAgents(agentsList: List<Agent>, pause: Boolean) {
         viewModelScope.launch {
             agentsList.forEach { agent ->
@@ -600,11 +852,33 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
             }
         }
     }
-
-    fun bulkUpdateAutonomyAndPermissions(agentsList: List<Agent>, autonomy: String, permissions: String) {
+    
+    fun restoreAgents(agentsList: List<Agent>) {
         viewModelScope.launch {
             agentsList.forEach { agent ->
-                repository.insertAgent(agent.copy(autonomyLevel = autonomy, permissions = permissions))
+                repository.insertAgent(agent)
+            }
+        }
+    }
+
+    fun bulkUpdateAutonomyAndPermissions(agentsList: List<Agent>, autonomy: String, permissions: String, priority: String) {
+        viewModelScope.launch {
+            agentsList.forEach { agent ->
+                val configObj = try { org.json.JSONObject(agent.configurationJson) } catch (e: Exception) { org.json.JSONObject() }
+                configObj.put("priority", priority)
+                repository.insertAgent(agent.copy(autonomyLevel = autonomy, permissions = permissions, configurationJson = configObj.toString()))
+            }
+        }
+    }
+
+    fun bulkAddTags(agentsList: List<Agent>, prefix: String, suffix: String) {
+        viewModelScope.launch {
+            agentsList.forEach { agent ->
+                val currentTraits = agent.traits.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toMutableList()
+                if (prefix.isNotBlank()) currentTraits.add(0, prefix.trim())
+                if (suffix.isNotBlank()) currentTraits.add(suffix.trim())
+                val newTraits = currentTraits.distinct().joinToString(", ")
+                repository.insertAgent(agent.copy(traits = newTraits))
             }
         }
     }
@@ -914,6 +1188,119 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
         }
     }
 
+    fun generateDailySummaryInsight() {
+        viewModelScope.launch {
+            if (!isApiKeyConfigured) {
+                _dailySummaryInsight.value = "Configure Gemini API Key in settings to enable AI insights."
+                return@launch
+            }
+            
+            _dailySummaryInsight.value = "Generating insight..."
+            
+            val totalSubTasks = subTasks.value.size
+            val completedSubTasks = subTasks.value.count { it.status == "Completed" }
+            val totalDecisions = decisions.value.size
+            val totalLogs = missionStateLogs.value.size
+            
+            val systemPrompt = "You are a concise AI assistant."
+            val promptText = """
+                Analyze this aggregate performance data for an agent colony:
+                Total SubTasks: $totalSubTasks
+                Completed SubTasks: $completedSubTasks
+                Decisions Made: $totalDecisions
+                Mission Logs: $totalLogs
+                
+                Generate a single, one-sentence insightful summary about the colony's daily performance and productivity trend. Do not use markdown or quotes.
+            """.trimIndent()
+            
+            try {
+                val rawText = com.example.network.AILlmClient.generateContent(getApplication(), promptText, systemPrompt)
+                _dailySummaryInsight.value = rawText.trim()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _dailySummaryInsight.value = "Failed to generate insight."
+            }
+        }
+    }
+
+    private fun startHeartbeat() {
+        viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(60000L) // 1 minute
+                val activeAgents = agents.value.filter { it.status.equals("Active", ignoreCase = true) || it.status.equals("Busy", ignoreCase = true) }
+                if (activeAgents.isNotEmpty()) {
+                    val agentNameStr = activeAgents.joinToString(", ") { it.name }
+                    repository.insertMissionStateLog(
+                        com.example.data.MissionStateLog(
+                            missionId = 0,
+                            agentName = "System",
+                            previousState = "Unknown",
+                            newState = "Heartbeat",
+                            message = "System check: $agentNameStr active.",
+                            timestamp = System.currentTimeMillis()
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private fun checkInteractionFrequency() {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val oneDayMs = 24 * 60 * 60 * 1000L
+            val sevenDaysAgo = now - (7 * oneDayMs)
+            
+            val currentAgents = repository.allAgents.first()
+            val currentSubTasks = repository.allSubTasks.first()
+            val currentDecisions = repository.allDecisions.first()
+            
+            val notificationManager = getApplication<Application>().getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                val channel = android.app.NotificationChannel("colony_channel", "Colony Agent Alerts", android.app.NotificationManager.IMPORTANCE_DEFAULT)
+                notificationManager.createNotificationChannel(channel)
+            }
+            
+            currentAgents.forEach { agent ->
+                val agentTasks = currentSubTasks.filter { it.assignedAgent.equals(agent.name, ignoreCase = true) }
+                val totalTasks = agentTasks.size
+                if (totalTasks >= 5) {
+                    val completedTasks = agentTasks.count { it.status == "Completed" }
+                    val completionRate = completedTasks.toFloat() / totalTasks.toFloat()
+                    if (completionRate < 0.3f) { // Threshold 30%
+                        val notification = androidx.core.app.NotificationCompat.Builder(getApplication(), "colony_channel")
+                            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                            .setContentTitle("Low Task Completion Rate")
+                            .setContentText("${agent.name} is struggling with tasks (${(completionRate * 100).toInt()}% completion).")
+                            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+                            .build()
+                        notificationManager.notify(agent.id + 10000, notification)
+                    }
+                }
+
+                val recentTasks = currentSubTasks.count { it.assignedAgent == agent.name && it.timestamp >= sevenDaysAgo }
+                val recentDecisionsCount = currentDecisions.count { it.agentName == agent.name && it.timestamp >= sevenDaysAgo }
+                val totalRecent = recentTasks + recentDecisionsCount
+                
+                val olderTasks = currentSubTasks.count { it.assignedAgent == agent.name && it.timestamp < sevenDaysAgo }
+                val olderDecisionsCount = currentDecisions.count { it.agentName == agent.name && it.timestamp < sevenDaysAgo }
+                val totalOlder = olderTasks + olderDecisionsCount
+                
+                // If the agent was active historically (e.g. > 10 interactions) but very inactive recently (e.g. < 2 interactions in 7 days)
+                if (totalOlder > 10 && totalRecent < 2) {
+                    val notification = androidx.core.app.NotificationCompat.Builder(getApplication(), "colony_channel")
+                        .setSmallIcon(android.R.drawable.ic_dialog_info)
+                        .setContentTitle("Agent Inactivity Alert")
+                        .setContentText("${agent.name}'s interaction frequency has dropped significantly.")
+                        .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
+                        .build()
+                    notificationManager.notify(agent.id, notification)
+                }
+            }
+        }
+    }
+
     fun applyRestPeriods() {
         viewModelScope.launch {
             val prefs = getApplication<Application>().getSharedPreferences("colony_prefs", android.content.Context.MODE_PRIVATE)
@@ -1138,14 +1525,42 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
         }
     }
 
-    fun createStandaloneSubTask(description: String, assignedAgent: String, status: String = "Pending") {
+    fun deleteSubTask(taskId: Int) {
+        viewModelScope.launch {
+            repository.deleteSubTaskById(taskId)
+        }
+    }
+    
+    fun deleteSubTasksByIds(taskIds: List<Int>) {
+        viewModelScope.launch {
+            repository.deleteSubTasksByIds(taskIds)
+        }
+    }
+    
+    fun restoreSubTasks(tasks: List<SubTask>) {
+        viewModelScope.launch {
+            repository.insertSubTasks(tasks)
+        }
+    }
+
+    fun updateSubTaskPriority(taskId: Int, priority: String) {
+        viewModelScope.launch {
+            val task = subTasks.value.find { it.id == taskId }
+            if (task != null) {
+                repository.insertSubTask(task.copy(priority = priority))
+            }
+        }
+    }
+
+    fun createStandaloneSubTask(description: String, assignedAgent: String, status: String = "Pending", priority: String = "Medium") {
         viewModelScope.launch {
             repository.insertSubTask(
                 SubTask(
                     missionId = null,
                     assignedAgent = assignedAgent,
                     description = description,
-                    status = status
+                    status = status,
+                    priority = priority
                 )
             )
             sendInterAgentMessage(
@@ -1158,7 +1573,57 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
             checkBadgeMilestones()
         }
     }
-    fun simulateAgentDiscussion(topic: String) {
+
+    private val agentGreetings = mutableMapOf<Int, MutableStateFlow<String>>()
+
+    fun getAgentGreeting(agent: Agent): StateFlow<String> {
+        val flow = agentGreetings.getOrPut(agent.id) { MutableStateFlow("...") }
+        if (flow.value == "...") {
+            flow.value = "Generating..."
+            viewModelScope.launch {
+                try {
+                    val prompt = "Generate a short, unique daily greeting and status summary (1-2 sentences) for an AI agent named ${agent.name} whose role is ${agent.role}. Be creative, concise, and in-character."
+                    val result = com.example.network.AILlmClient.generateContent(getApplication(), prompt)
+                    flow.value = result
+                } catch (e: Exception) {
+                    flow.value = "Welcome back, ${agent.name}!"
+                }
+            }
+        }
+        return flow
+    }
+
+    fun autoTagTask(description: String, onResult: (priority: String, agent: String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val currentAgents = agents.value.joinToString(", ") { it.name + " (" + it.role + ")" }
+                val prompt = """
+                    Analyze the following task description and suggest the most relevant priority level (High, Medium, Low) and the most appropriate agent from the following list: $currentAgents.
+                    Task: "$description"
+                    Respond strictly in JSON format like: {"priority": "High", "agent": "Agent Name"}
+                """.trimIndent()
+                
+                val result = com.example.network.AILlmClient.generateContent(getApplication(), prompt).trim()
+                
+                // Extremely simple parsing, expecting strict JSON or at least something similar
+                var suggestedPriority = "Medium"
+                var suggestedAgent = agents.value.firstOrNull()?.name ?: ""
+                
+                if (result.contains("\"priority\": \"High\"", ignoreCase = true)) suggestedPriority = "High"
+                else if (result.contains("\"priority\": \"Low\"", ignoreCase = true)) suggestedPriority = "Low"
+                
+                val bestAgentMatch = agents.value.find { result.contains(it.name, ignoreCase = true) }
+                if (bestAgentMatch != null) {
+                    suggestedAgent = bestAgentMatch.name
+                }
+                
+                onResult(suggestedPriority, suggestedAgent)
+            } catch (e: Exception) {
+                // Ignore, use fallback if needed
+            }
+        }
+    }
+    fun initiateAgentDiscussion(topic: String) {
         viewModelScope.launch {
             val currentAgents = agents.value.filter { it.status != "Paused" && it.status != "Halted" }.take(3)
             if (currentAgents.isEmpty()) return@launch
@@ -1190,7 +1655,6 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
                             content = responseContent,
                             topic = topic
                         )
-                        delay(300)
                     } catch (e: Exception) {
                         e.printStackTrace()
                     }
@@ -1248,7 +1712,7 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
         }
     }
 
-    fun autoSimulateAgentNegotiation() {
+    fun autoInitiateAgentNegotiation() {
         viewModelScope.launch {
             val active = agents.value.filter { it.status == "Active" }
             if (active.size < 2) return@launch
@@ -1262,9 +1726,28 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
             }
             if (p1.id == p2.id) return@launch
             
-            val topics = listOf("Compute Quota", "Priority Lock", "Data Access Permissions", "Subtask Delegation", "Schedule Window")
-            val selectedTopic = topics.random()
-            val action = "Request exclusive priority lock for ${selectedTopic.lowercase()} during peak cycles."
+            val contextApp = getApplication<Application>()
+            val prompt = """
+                You are ${p1.name} (${p1.role}). You need to initiate a system resource or task negotiation with ${p2.name} (${p2.role}).
+                Propose a single specific topic of conflict (e.g. "Compute Quota", "Data Access", etc.) on the first line.
+                Propose the action or demand you are making on the second line.
+                Keep both extremely short.
+            """.trimIndent()
+            
+            var selectedTopic = "Compute Quota"
+            var action = "Request exclusive priority lock for compute quota during peak cycles."
+            
+            try {
+                val reply = com.example.network.AILlmClient.generateContent(contextApp, prompt).trim().lines()
+                if (reply.isNotEmpty()) {
+                    selectedTopic = reply.first().take(50)
+                    if (reply.size > 1) {
+                        action = reply[1].take(200)
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
             
             val proposal = com.example.data.AgentNegotiationProposal(
                 proposerAgent = p1.name,
@@ -1289,10 +1772,37 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
             val proposer = activeAgentsList.random().name
             val voteTopic = "Colony Policy: $policyName"
             val action = "Enforce new $policyName rules across all agent execution pipelines."
+            
+            val contextApp = getApplication<Application>()
 
             activeAgentsList.filter { it.name != proposer }.forEach { target ->
-                val status = if ((1..10).random() > 3) "Accepted" else "Countered"
-                val counter = if (status == "Countered") "Require manual human sign-off before $policyName activation." else ""
+                
+                val prompt = """
+                    You are ${target.name} (${target.role}). You are voting on a colony-wide policy proposed by $proposer.
+                    The policy is: "$policyName".
+                    Will you accept this policy? Respond with exactly "Accepted" or "Countered" on the first line.
+                    If you counter, provide a 1-sentence counter-proposal on the second line.
+                """.trimIndent()
+                
+                var status = "Accepted"
+                var counter = ""
+                
+                try {
+                    val reply = com.example.network.AILlmClient.generateContent(contextApp, prompt).trim().lines()
+                    if (reply.isNotEmpty()) {
+                        val firstLine = reply.first().uppercase()
+                        if (firstLine.contains("COUNTER")) {
+                            status = "Countered"
+                            if (reply.size > 1) {
+                                counter = reply[1].take(200)
+                            } else {
+                                counter = "Require further review based on ${target.role} constraints."
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
                 
                 val proposal = com.example.data.AgentNegotiationProposal(
                     proposerAgent = proposer,
@@ -1311,28 +1821,49 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
     }
 
     fun pingAllAgentMeshNodes() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val currentAgents = agents.value
             if (currentAgents.isEmpty()) return@launch
 
+            val runtime = Runtime.getRuntime()
+            val maxMemMb = runtime.maxMemory() / (1024 * 1024)
+            val totalMemMb = runtime.totalMemory() / (1024 * 1024)
+            val freeMemMb = runtime.freeMemory() / (1024 * 1024)
+            val usedMemMb = (totalMemMb - freeMemMb).toFloat()
+            val cpuLoad = ((totalMemMb - freeMemMb).toFloat() / maxMemMb.toFloat()) * 100f // proxy for app load
+
+            // ping google.com for real network latency
+            var realLatency = 0L
+            try {
+                val start = System.currentTimeMillis()
+                val url = java.net.URL("https://www.google.com")
+                val connection = url.openConnection() as java.net.HttpURLConnection
+                connection.connectTimeout = 3000
+                connection.readTimeout = 3000
+                connection.connect()
+                if (connection.responseCode == 200) {
+                    realLatency = System.currentTimeMillis() - start
+                }
+                connection.disconnect()
+            } catch (e: Exception) {
+                realLatency = -1L
+            }
+
             currentAgents.forEach { agent ->
-                val latency = (12..140).random().toLong()
-                val cpu = ((15..85).random() / 10f) * 10f
-                val ram = (128..1024).random().toFloat()
-                val activeConn = (2..12).random()
                 val health = when {
-                    latency > 110 -> "Degraded"
-                    cpu > 80f -> "Warning"
+                    realLatency < 0L -> "Disconnected"
+                    realLatency > 500L -> "Degraded"
+                    cpuLoad > 85f -> "Warning"
                     else -> "Optimal"
                 }
 
                 val telemetry = com.example.data.AgentMeshTelemetry(
                     agentId = agent.id,
                     agentName = agent.name,
-                    latencyMs = latency,
-                    cpuLoadPct = cpu,
-                    memoryUsageMb = ram,
-                    activeConnectionsCount = activeConn,
+                    latencyMs = if (realLatency < 0L) 999L else realLatency,
+                    cpuLoadPct = cpuLoad,
+                    memoryUsageMb = usedMemMb,
+                    activeConnectionsCount = 1, // Single host app
                     healthStatus = health
                 )
                 repository.insertMeshTelemetry(telemetry)
@@ -1375,42 +1906,44 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
     fun synthesizeKnowledgeGraphFromColonyState() {
         viewModelScope.launch {
             val agentList = agents.value
-            val activeMissions = missions.value.take(4)
-            val currentDecisions = decisions.value.take(4)
+            val activeSubtasks = repository.allSubTasks.first()
+            val currentDecisions = decisions.value.take(10)
 
             if (agentList.isEmpty()) return@launch
 
-            // Auto-generate edges connecting Agents to Missions
-            activeMissions.forEach { mission ->
-                val randomAgent = agentList.random().name
-                val edge = com.example.data.AgentKnowledgeEdge(
-                    sourceLabel = randomAgent,
-                    sourceType = "AGENT",
-                    targetLabel = mission.goal,
-                    targetType = "MISSION",
-                    relationType = "EXECUTES",
-                    weight = (7..10).random() / 10f,
-                    creatorAgent = randomAgent
-                )
-                repository.insertKnowledgeEdge(edge)
+            // Create real edges based on actual SubTask assignments (Mission -> SubTask -> Agent)
+            activeSubtasks.forEach { subTask ->
+                val assignedAgent = agentList.find { it.name == subTask.assignedAgent }
+                if (assignedAgent != null) {
+                    val edge = com.example.data.AgentKnowledgeEdge(
+                        sourceLabel = assignedAgent.name,
+                        sourceType = "AGENT",
+                        targetLabel = subTask.description.take(50),
+                        targetType = "SUBTASK",
+                        relationType = "EXECUTES",
+                        weight = 0.95f,
+                        creatorAgent = assignedAgent.name
+                    )
+                    repository.insertKnowledgeEdge(edge)
+                }
             }
 
-            // Auto-generate edges connecting Decisions to Agents
+            // Create real edges based on actual Decisions
             currentDecisions.forEach { decision ->
-                val randomAgent = agentList.random().name
+                val agentName = decision.agentName
                 val edge = com.example.data.AgentKnowledgeEdge(
-                    sourceLabel = decision.actionDescription,
+                    sourceLabel = decision.actionDescription.take(50),
                     sourceType = "DECISION",
-                    targetLabel = randomAgent,
+                    targetLabel = agentName,
                     targetType = "AGENT",
-                    relationType = "APPROVED_BY",
+                    relationType = "MADE_BY",
                     weight = 0.9f,
-                    creatorAgent = randomAgent
+                    creatorAgent = agentName
                 )
                 repository.insertKnowledgeEdge(edge)
             }
 
-            repository.insertMemory(ColonyMemory(content = "Autonomous Knowledge Graph Edge Synthesis Executed."))
+            repository.insertMemory(ColonyMemory(content = "Autonomous Knowledge Graph Edge Synthesis Executed from real state."))
         }
     }
 
@@ -1471,43 +2004,28 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
                         else -> "GENERAL"
                     }
 
-                    val confidence = (75..98).random() / 100f
-                    val policy = when (key) {
-                        "RISK_THRESHOLD" -> {
-                            if (!contactPermGranted || !calendarPermGranted) {
-                                "Naruszenie polityki: uprawnienia systemowe są odrzucone (Kontakty: ${if (contactPermGranted) "Zezwolono" else "Odmowa"}, Kalendarz: ${if (calendarPermGranted) "Zezwolono" else "Odmowa"}). Zablokuj operacje wysokiego ryzyka."
-                            } else {
-                                "Uprawnienia systemowe są w pełni przyznane. Sentinel Agent nadzoruje operacje w trybie automatycznym."
-                            }
-                        }
-                        "DELEGATION_PRIORITY" -> {
-                            if (activeSubTaskCount > 0) {
-                                "Wykryto obciążenie: $activeSubTaskCount aktywnych podzadań. Przydzielaj zadania według priorytetu i poziomu energii agentów."
-                            } else {
-                                "Kolonia jest w stanie bezczynności. Przejdź w tryb uśpienia o niskim poborze mocy."
-                            }
-                        }
-                        "EXECUTION_SPEED" -> {
-                            if (avgLatency > 0.0) {
-                                "Średnie opóźnienie sieci wynosi ${String.format(java.util.Locale.US, "%.1f", avgLatency)}ms. Optymalizuj pule wątków w celu przyspieszenia wykonywania zadań."
-                            } else {
-                                "Brak zebranych metryk telemetrycznych. Utrzymuj domyślne tempo wykonania na poziomie 1.0x."
-                            }
-                        }
-                        "REASONING_DEPTH" -> {
-                            "Optymalizuj głębokość weryfikacji decyzji do 14 faz (Liczba aktywnych agentów: ${agentList.count { it.status == "Active" }})."
-                        }
-                        else -> "Zastosuj zrównoważoną regułę awaryjną."
+                    val systemContext = "System context: Contacts Perm: $contactPermGranted, Calendar Perm: $calendarPermGranted, Mesh Latency: $avgLatency ms, Active Subtasks: $activeSubTaskCount. Agent Role: $spec."
+                    val prompt = """
+                        You are the EDDE Evolution Engine. Generate a single sentence heuristic policy for the agent '${agent.name}' (key: $key) based on the following context.
+                        $systemContext
+                        Respond with ONLY the policy sentence in Polish.
+                    """.trimIndent()
+
+                    val policyResponse = try {
+                        com.example.network.AILlmClient.generateContent(getApplication(), prompt).trim()
+                    } catch (e: Exception) {
+                        "Utrzymuj standardowe procedury operacyjne."
                     }
+                    val finalPolicy = if (policyResponse.isNotEmpty()) policyResponse else "Utrzymuj standardowe procedury operacyjne."
 
                     val newHeuristic = com.example.data.AgentHeuristicRule(
                         agentName = agent.name,
                         heuristicKey = key,
                         patternTarget = target,
-                        confidenceScore = confidence,
-                        successCount = (1..15).random(),
+                        confidenceScore = 0.85f,
+                        successCount = 0,
                         failureCount = 0,
-                        adaptedPolicy = policy,
+                        adaptedPolicy = finalPolicy,
                         generation = nextGeneration,
                         lastEvolvedTimestamp = System.currentTimeMillis()
                     )
@@ -1938,25 +2456,175 @@ class ColonyViewModel(application: Application) : BaseAgentViewModel(application
         }
     }
 
-    fun triggerAutoEvolution() {
+    fun getSentimentLogsForAgent(agentName: String) = repository.getSentimentLogsForAgent(agentName)
+    
+    fun recordAgentMood(agentName: String, moodInfo: com.example.data.AgentMoodInfo) {
         viewModelScope.launch {
-            try {
-                android.util.Log.d("ColonyViewModel", "[GENEROWANE LOSOWO] Triggering Auto-Evolution Engine V2...")
-                kotlinx.coroutines.delay(1500)
-                val newHeuristic = com.example.data.AgentHeuristicRule(
-                    agentName = "System",
-                    heuristicKey = "EVOLVED_RISK_AVOIDANCE_${System.currentTimeMillis()}",
-                    patternTarget = "GENERAL_SAFETY",
-                    confidenceScore = 0.85f,
-                    adaptedPolicy = "If error rate > 5%, switch to SAFE mode automatically.",
-                    generation = 2
+            repository.insertSentimentLog(
+                com.example.data.AgentSentimentLog(
+                    agentName = agentName,
+                    emoji = moodInfo.emoji,
+                    moodTitle = moodInfo.moodTitle
                 )
-                repository.insertHeuristic(newHeuristic)
-                android.util.Log.d("ColonyViewModel", "[GENEROWANE LOSOWO] Auto-Evolution complete. New heuristic saved.")
-            } catch (e: Exception) {
-                android.util.Log.e("ColonyViewModel", "Auto-Evolution failed", e)
+            )
+        }
+    }
+
+    // Self-Healing Network
+    fun triggerSelfHealingScan() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val proposal = com.example.data.SelfHealingProposal(
+                missionId = 1,
+                errorLogSnippet = "java.lang.NullPointerException: Null agent context during payload synthesis at TaskExecutor.kt:142",
+                rootCauseAnalysis = "Brak sprawdzania wartości null przy inicjalizacji kontekstu misji w pod-zadaniu #14. Agent Architekt wykrył wyścig stanów.",
+                proposedCodeFix = "if (agentContext == null) { agentContext = AgentContext.createDefault(agentName) }\nval result = agentContext.executePayload(payload)",
+                architectAgentName = "Architekt Systemowy",
+                status = "Pending"
+            )
+            repository.colonyDao.insertSelfHealingProposal(proposal)
+        }
+    }
+
+    fun applySelfHealingFix(id: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.colonyDao.updateSelfHealingProposalStatus(id, "Applied")
+        }
+    }
+
+    fun rejectSelfHealingFix(id: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.colonyDao.updateSelfHealingProposalStatus(id, "Rejected")
+        }
+    }
+
+    // Workflow DAG Management
+    fun saveWorkflowDag(name: String, description: String, nodesJson: String, edgesJson: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val dag = com.example.data.WorkflowDag(
+                name = name,
+                description = description,
+                nodesJson = nodesJson,
+                edgesJson = edgesJson
+            )
+            repository.colonyDao.insertWorkflowDag(dag)
+        }
+    }
+
+    fun deleteWorkflowDag(id: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.colonyDao.deleteWorkflowDag(id)
+        }
+    }
+
+    // Multi-Colony Management
+    fun createColonyProfile(name: String, category: String, description: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val profile = com.example.data.ColonyProfile(
+                name = name,
+                category = category,
+                description = description,
+                isCurrentActive = false
+            )
+            repository.colonyDao.insertColonyProfile(profile)
+        }
+    }
+
+    fun switchActiveColony(activeId: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.colonyDao.setActiveColonyProfile(activeId)
+        }
+    }
+
+    // Vector Embeddings & Hallucination Audit
+    fun addVectorEmbeddingLog(sourceText: String, tag: String, vectorJson: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.colonyDao.insertVectorEmbeddingLog(
+                com.example.data.VectorEmbeddingLog(
+                    sourceText = sourceText,
+                    tag = tag,
+                    embeddingVectorJson = vectorJson
+                )
+            )
+        }
+    }
+
+    fun addHallucinationAuditLog(promptText: String, responseText: String, factCheckScore: Float, verdict: String, checkedClaimsJson: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.colonyDao.insertHallucinationAuditLog(
+                com.example.data.HallucinationAuditLog(
+                    promptText = promptText,
+                    responseText = responseText,
+                    factCheckScore = factCheckScore,
+                    verdict = verdict,
+                    checkedClaimsJson = checkedClaimsJson
+                )
+            )
+        }
+    }
+
+    fun getUserAgentMessages(agentName: String): kotlinx.coroutines.flow.Flow<List<com.example.data.UserAgentMessage>> {
+        return repository.colonyDao.getUserAgentMessages(agentName)
+    }
+
+    fun insertUserAgentMessage(agentName: String, role: String, content: String) {
+        viewModelScope.launch {
+            repository.colonyDao.insertUserAgentMessage(
+                com.example.data.UserAgentMessage(agentName = agentName, role = role, content = content)
+            )
+            
+            // If user sent a message, get AI response
+            if (role == "user" && isApiKeyConfigured) {
+                try {
+                    // Fetch existing messages to form a context
+                    val flowMessages = repository.colonyDao.getUserAgentMessages(agentName)
+                    val history = flowMessages.first()
+                    val historyText = history.takeLast(10).joinToString("\n") { "${it.role}: ${it.content}" }
+                    
+                    val systemPrompt = "You are an AI agent named $agentName."
+                    val promptText = """
+                        Conversation history:
+                        $historyText
+                        
+                        Respond as $agentName.
+                    """.trimIndent()
+                    
+                    val response = com.example.network.AILlmClient.generateContent(getApplication(), promptText, systemPrompt)
+                    
+                    repository.colonyDao.insertUserAgentMessage(
+                        com.example.data.UserAgentMessage(agentName = agentName, role = "model", content = response.trim())
+                    )
+                    
+
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    repository.colonyDao.insertUserAgentMessage(
+                        com.example.data.UserAgentMessage(agentName = agentName, role = "model", content = "Error: ${e.message}")
+                    )
+                }
             }
         }
     }
-}
 
+    fun clearUserAgentMessages(agentName: String) {
+        viewModelScope.launch {
+            repository.colonyDao.clearUserAgentMessages(agentName)
+        }
+    }
+
+
+    val personaAgents: StateFlow<List<com.example.data.PersonaAgent>> = repository.allPersonaAgents
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    fun insertPersonaAgent(agent: com.example.data.PersonaAgent) {
+        viewModelScope.launch {
+            repository.insertPersonaAgent(agent)
+        }
+    }
+    
+    fun deletePersonaAgent(id: Int) {
+        viewModelScope.launch {
+            repository.deletePersonaAgentById(id)
+        }
+    }
+
+}

@@ -38,7 +38,7 @@ fun InterAgentChatScreen(
 
     var selectedTopic by remember { mutableStateOf("All") }
     var userBroadcastText by remember { mutableStateOf("") }
-    var showSimulateDialog by remember { mutableStateOf(false) }
+    var showInitiateDialog by remember { mutableStateOf(false) }
     var simTopicText by remember { mutableStateOf("") }
 
     val topics = listOf("All", "Task Synchronization", "Colony Health & Balance", "Governance & Privacy", "Task Assignment")
@@ -76,15 +76,15 @@ fun InterAgentChatScreen(
                 },
                 actions = {
                     Button(
-                        onClick = { showSimulateDialog = true },
+                        onClick = { showInitiateDialog = true },
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                         modifier = Modifier
                             .padding(end = 8.dp)
-                            .testTag("simulate_agent_chat_btn")
+                            .testTag("initiate_agent_chat_btn")
                     ) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Simulate Chat", style = MaterialTheme.typography.labelMedium)
+                        Text("Initiate Chat", style = MaterialTheme.typography.labelMedium)
                     }
                 }
             )
@@ -135,7 +135,7 @@ fun InterAgentChatScreen(
                             color = MaterialTheme.colorScheme.outline
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Button(onClick = { viewModel.simulateAgentDiscussion(if (selectedTopic == "All") "General Colony Progress" else selectedTopic) }) {
+                        Button(onClick = { viewModel.initiateAgentDiscussion(if (selectedTopic == "All") "General Colony Progress" else selectedTopic) }) {
                             Text("Trigger Discussion")
                         }
                     }
@@ -192,7 +192,7 @@ fun InterAgentChatScreen(
                                     content = text,
                                     topic = if (selectedTopic == "All") "Director Directive" else selectedTopic
                                 )
-                                viewModel.simulateAgentDiscussion(text)
+                                viewModel.initiateAgentDiscussion(text)
                                 userBroadcastText = ""
                             }
                         },
@@ -211,11 +211,11 @@ fun InterAgentChatScreen(
         }
     }
 
-    // Dialog to simulate custom topic discussion
-    if (showSimulateDialog) {
+    // Dialog to initiate custom topic discussion
+    if (showInitiateDialog) {
         AlertDialog(
-            onDismissRequest = { showSimulateDialog = false },
-            title = { Text("Simulate Inter-Agent Discussion", fontWeight = FontWeight.Bold) },
+            onDismissRequest = { showInitiateDialog = false },
+            title = { Text("Initiate Inter-Agent Discussion", fontWeight = FontWeight.Bold) },
             text = {
                 Column {
                     Text("Enter a shared task or colony topic for agents to debate and coordinate:", style = MaterialTheme.typography.bodySmall)
@@ -234,8 +234,8 @@ fun InterAgentChatScreen(
                 Button(
                     onClick = {
                         val topic = if (simTopicText.isNotBlank()) simTopicText.trim() else "Colony Optimization"
-                        viewModel.simulateAgentDiscussion(topic)
-                        showSimulateDialog = false
+                        viewModel.initiateAgentDiscussion(topic)
+                        showInitiateDialog = false
                         simTopicText = ""
                     },
                     modifier = Modifier.testTag("start_sim_discussion_btn")
@@ -244,7 +244,7 @@ fun InterAgentChatScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showSimulateDialog = false }) {
+                TextButton(onClick = { showInitiateDialog = false }) {
                     Text("Cancel")
                 }
             }

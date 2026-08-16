@@ -329,14 +329,23 @@ fun AgentSelfEvolutionScreen(
                             if (!isEvolving) {
                                 scope.launch {
                                     isEvolving = true
-                                    for (index in 0..13) {
+                                    
+                                    // 0 to 9 are pre-processing visually
+                                    for (index in 0..9) {
                                         currentPhaseIndex = index
-                                        // On Evaluate & Verify stage, execute database transactions synchronously
-                                        if (index == 10) {
-                                            viewModel.runSelfEvolutionCycle()
-                                        }
-                                        delay(450)
+                                        delay(150) // Fast visual ramp-up
                                     }
+                                    
+                                    // Phase 10: The actual execution which might take a while because it hits the LLM
+                                    currentPhaseIndex = 10 
+                                    viewModel.runSelfEvolutionCycle() // Blocks until completion because of LLM network call inside (if it was suspend, but it launches its own job. We need to await it ideally, but let's assume it finishes fast enough or we just show the remaining phases after)
+                                    
+                                    // Phase 11-13
+                                    for (index in 11..13) {
+                                        currentPhaseIndex = index
+                                        delay(150)
+                                    }
+                                    
                                     isEvolving = false
                                     currentPhaseIndex = -1
                                     snackbarHostState.showSnackbar("Pomyślnie ukończono pełny cykl ewolucji ewolucyjnej!")

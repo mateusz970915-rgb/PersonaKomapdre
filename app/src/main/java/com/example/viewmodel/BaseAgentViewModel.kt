@@ -35,6 +35,15 @@ open class BaseAgentViewModel(application: Application) : AndroidViewModel(appli
             initialValue = AgentPreferences()
         )
 
+    fun updateAgentAvatar(agentId: Int, newAvatarUrl: String) {
+        viewModelScope.launch {
+            val agent = agentsState.value.find { it.id == agentId }
+            if (agent != null) {
+                baseRepository.insertAgent(agent.copy(avatarUrl = newAvatarUrl))
+            }
+        }
+    }
+
     fun cycleAgentStatus(agentId: Int) {
         viewModelScope.launch {
             val currentList = agentsState.value
@@ -187,6 +196,116 @@ open class BaseAgentViewModel(application: Application) : AndroidViewModel(appli
     fun updateHasSeenWalkthrough(seen: Boolean) {
         viewModelScope.launch {
             preferencesRepository.updateHasSeenWalkthrough(seen)
+        }
+    }
+
+    fun updatePrimaryLanguage(language: String) {
+        viewModelScope.launch {
+            preferencesRepository.updatePrimaryLanguage(language)
+        }
+    }
+
+    fun updateAutoUpdatesEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.updateAutoUpdatesEnabled(enabled)
+        }
+    }
+
+    fun updateAllowAgentCommunication(allow: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.updateAllowAgentCommunication(allow)
+        }
+    }
+
+    fun updateAllowMeshBroadcasts(allow: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.updateAllowMeshBroadcasts(allow)
+        }
+    }
+
+    fun updateEncryptAgentMessages(encrypt: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.updateEncryptAgentMessages(encrypt)
+        }
+    }
+
+    fun updateAllowCrossColonySync(allow: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.updateAllowCrossColonySync(allow)
+        }
+    }
+
+    fun updateLogAgentCommunication(log: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.updateLogAgentCommunication(log)
+        }
+    }
+
+    fun updateSelectedChartType(chartType: String) {
+        viewModelScope.launch {
+            preferencesRepository.updateSelectedChartType(chartType)
+        }
+    }
+
+    fun updateSelectedChartDateRange(dateRange: Int) {
+        viewModelScope.launch {
+            preferencesRepository.updateSelectedChartDateRange(dateRange)
+        }
+    }
+
+    fun updateChartColorIntensity(intensity: String) {
+        viewModelScope.launch {
+            preferencesRepository.updateChartColorIntensity(intensity)
+        }
+    }
+
+    fun updateTrendAlertThreshold(threshold: Int) {
+        viewModelScope.launch {
+            preferencesRepository.updateTrendAlertThreshold(threshold)
+        }
+    }
+
+    fun updateTrendAlertsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.updateTrendAlertsEnabled(enabled)
+        }
+    }
+
+    fun updateTrendComparisonInterval(interval: String) {
+        viewModelScope.launch {
+            preferencesRepository.updateTrendComparisonInterval(interval)
+        }
+    }
+
+    fun updateTrendAggregationMethod(method: String) {
+        viewModelScope.launch {
+            preferencesRepository.updateTrendAggregationMethod(method)
+        }
+    }
+
+    fun updateShowCalendarOverlay(show: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.updateShowCalendarOverlay(show)
+        }
+    }
+
+    fun triggerInteractionAnomalyCheck() {
+        try {
+            val workManager = androidx.work.WorkManager.getInstance(getApplication())
+            val request = androidx.work.OneTimeWorkRequestBuilder<com.example.worker.InteractionAnomalyWorker>().build()
+            workManager.enqueue(request)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun triggerAgentDataSync() {
+        try {
+            val workManager = androidx.work.WorkManager.getInstance(getApplication())
+            val request = androidx.work.OneTimeWorkRequestBuilder<com.example.worker.AgentDataSyncWorker>().build()
+            workManager.enqueue(request)
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 }

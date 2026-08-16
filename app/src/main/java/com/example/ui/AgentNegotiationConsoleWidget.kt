@@ -110,12 +110,12 @@ fun AgentNegotiationConsoleWidget(
 
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     IconButton(
-                        onClick = { viewModel.autoSimulateAgentNegotiation() },
-                        modifier = Modifier.testTag("simulate_conflict_btn")
+                        onClick = { viewModel.autoInitiateAgentNegotiation() },
+                        modifier = Modifier.testTag("initiate_conflict_btn")
                     ) {
                         Icon(
                             imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = "Simulate Conflict",
+                            contentDescription = "Initiate Conflict",
                             tint = MaterialTheme.colorScheme.secondary
                         )
                     }

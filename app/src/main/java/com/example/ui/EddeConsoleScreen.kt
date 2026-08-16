@@ -113,7 +113,6 @@ fun EddeConsoleScreen(
         }
 
         for ((index, phase) in phasesList.withIndex()) {
-            delay(200)
             consoleLogs.add("${index + 1}. ${phase.first}: ${phase.second}")
             if (index == 2 && llmResponse.isNotBlank()) {
                 consoleLogs.add("   [CRITICAL PARTNER] ${llmResponse.take(120)}...")
@@ -123,7 +122,6 @@ fun EddeConsoleScreen(
             }
         }
         
-        delay(300)
         consoleLogs.add("--------------------------------------------------")
         consoleLogs.add("✅ Cykl EDDE zakończony sukcesem. Zapisano raport do lokalnego rejestru.")
         consoleLogs.add("Możesz teraz wpisać 'export' lub kliknąć ikonę pobierania, aby pobrać PDF.")

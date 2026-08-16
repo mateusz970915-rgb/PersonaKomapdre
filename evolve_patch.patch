@@ -1,0 +1,57 @@
+--- app/src/main/java/com/example/viewmodel/ColonyViewModel.kt
++++ app/src/main/java/com/example/viewmodel/ColonyViewModel.kt
+@@ -1701,41 +1701,23 @@
+                         else -> "GENERAL"
+                     }
+ 
+-                    val confidence = (75..98).random() / 100f
+-                    val policy = when (key) {
+-                        "RISK_THRESHOLD" -> {
+-                            if (!contactPermGranted || !calendarPermGranted) {
+-                                "Naruszenie polityki: uprawnienia systemowe są odrzucone (Kontakty: ${if (contactPermGranted) "Zezwolono" else "Odmowa"}, Kalendarz: ${if (calendarPermGranted) "Zezwolono" else "Odmowa"}). Zablokuj operacje wysokiego ryzyka."
+-                            } else {
+-                                "Uprawnienia systemowe są w pełni przyznane. Sentinel Agent nadzoruje operacje w trybie automatycznym."
+-                            }
+-                        }
+-                        "DELEGATION_PRIORITY" -> {
+-                            if (activeSubTaskCount > 0) {
+-                                "Wykryto obciążenie: $activeSubTaskCount aktywnych podzadań. Przydzielaj zadania według priorytetu i poziomu energii agentów."
+-                            } else {
+-                                "Kolonia jest w stanie bezczynności. Przejdź w tryb uśpienia o niskim poborze mocy."
+-                            }
+-                        }
+-                        "EXECUTION_SPEED" -> {
+-                            if (avgLatency > 0.0) {
+-                                "Średnie opóźnienie sieci wynosi ${String.format(java.util.Locale.US, "%.1f", avgLatency)}ms. Optymalizuj pule wątków w celu przyspieszenia wykonywania zadań."
+-                            } else {
+-                                "Brak zebranych metryk telemetrycznych. Utrzymuj domyślne tempo wykonania na poziomie 1.0x."
+-                            }
+-                        }
+-                        "REASONING_DEPTH" -> {
+-                            "Optymalizuj głębokość weryfikacji decyzji do 14 faz (Liczba aktywnych agentów: ${agentList.count { it.status == "Active" }})."
+-                        }
+-                        else -> "Zastosuj zrównoważoną regułę awaryjną."
+-                    }
++                    val systemContext = "System context: Contacts Perm: \$contactPermGranted, Calendar Perm: \$calendarPermGranted, Mesh Latency: \$avgLatency ms, Active Subtasks: \$activeSubTaskCount. Agent Role: \$spec."
++                    val prompt = """
++                        You are the EDDE Evolution Engine. Generate a single sentence heuristic policy for the agent '${agent.name}' (key: \$key) based on the following context.
++                        \$systemContext
++                        Respond with ONLY the policy sentence in Polish.
++                    """.trimIndent()
++
++                    val policyResponse = com.example.network.AILlmClient.generateContent(getApplication(), prompt).trim()
++                    val finalPolicy = if (policyResponse.isNotEmpty()) policyResponse else "Utrzymuj standardowe procedury wykonawcze."
++                    val confidence = 0.85f
+ 
+                     val newHeuristic = com.example.data.AgentHeuristicRule(
+                         agentName = agent.name,
+                         heuristicKey = key,
+                         patternTarget = target,
+                         confidenceScore = confidence,
+-                        successCount = (1..15).random(),
++                        successCount = 0,
+                         failureCount = 0,
+-                        adaptedPolicy = policy,
++                        adaptedPolicy = finalPolicy,
+                         generation = nextGeneration,
+                         lastEvolvedTimestamp = System.currentTimeMillis()

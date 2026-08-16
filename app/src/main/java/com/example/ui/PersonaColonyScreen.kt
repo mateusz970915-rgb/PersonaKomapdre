@@ -155,7 +155,9 @@ fun PersonaColonyScreen(
                 PersonaActivityVicoChartCard(
                     agents = agents,
                     completedSubTasks = completedSubTasks,
-                    allSubTasks = subTasks
+                    allSubTasks = subTasks,
+                    selectedChartType = agentPreferences.selectedChartType,
+                    onChartTypeSelected = { viewModel.updateSelectedChartType(it) }
                 )
             }
 
@@ -443,9 +445,12 @@ fun PreferenceSwitchRow(
 fun PersonaActivityVicoChartCard(
     agents: List<Agent>,
     completedSubTasks: List<SubTask>,
-    allSubTasks: List<SubTask>
+    allSubTasks: List<SubTask>,
+    selectedChartType: String? = null,
+    onChartTypeSelected: ((String) -> Unit)? = null
 ) {
-    var chartType by remember { mutableStateOf("Column") }
+    val initialType = if (selectedChartType == "Bar" || selectedChartType == "Column") "Column" else if (selectedChartType == "Line") "Line" else "Column"
+    var chartType by remember(selectedChartType) { mutableStateOf(initialType) }
 
     // Aggregate completed tasks per persona agent
     val personaCounts = remember(agents, completedSubTasks, allSubTasks) {
@@ -499,13 +504,19 @@ fun PersonaActivityVicoChartCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     FilterChip(
                         selected = chartType == "Column",
-                        onClick = { chartType = "Column" },
+                        onClick = {
+                            chartType = "Column"
+                            onChartTypeSelected?.invoke("Bar")
+                        },
                         label = { Text("Bars", style = MaterialTheme.typography.labelSmall) },
                         modifier = Modifier.testTag("chart_type_bars")
                     )
                     FilterChip(
                         selected = chartType == "Line",
-                        onClick = { chartType = "Line" },
+                        onClick = {
+                            chartType = "Line"
+                            onChartTypeSelected?.invoke("Line")
+                        },
                         label = { Text("Line", style = MaterialTheme.typography.labelSmall) },
                         modifier = Modifier.testTag("chart_type_line")
                     )

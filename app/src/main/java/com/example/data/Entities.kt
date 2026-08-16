@@ -24,7 +24,11 @@ data class Agent(
     val personaDescription: String = "",
     val lastActiveTimestamp: Long = 0L,
     val avatarUrl: String = "",
-    val configurationJson: String = "{}"
+    val configurationJson: String = "{}",
+    val isFavorite: Boolean = false,
+    val category: String = "General",
+    val failoverAgentId: Int? = null,
+    val maxLatencyThresholdMs: Long = 5000L
 )
 
 @Entity(tableName = "council_messages")
@@ -84,7 +88,9 @@ data class SubTask(
     val actionType: String = "LLM_PROMPT",
     val status: String = "Pending", // Pending, In Progress, Completed
     val timestamp: Long = System.currentTimeMillis(),
-    val completedAt: Long = 0L
+    val completedAt: Long = 0L,
+    val priority: String = "Medium", // High, Medium, Low
+    val progress: Int = 0 // 0 to 100
 )
 
 @Entity(tableName = "data_access_requests")
@@ -313,6 +319,19 @@ data class Subscription(
 )
 
 @Serializable
+@Entity(
+    tableName = "agent_sentiment_logs",
+    indices = [Index(value = ["agentName"])]
+)
+data class AgentSentimentLog(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val agentName: String,
+    val emoji: String,
+    val moodTitle: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Serializable
 @Entity(tableName = "sleep_records")
 data class SleepRecord(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
@@ -327,6 +346,101 @@ data class SleepRecord(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+@Serializable
+@Entity(tableName = "chart_annotations")
+data class ChartAnnotation(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val timestamp: Long = System.currentTimeMillis(),
+    val note: String,
+    val tag: String = "General",
+    val agentId: Int? = null,
+    val colorHex: String = "#3B82F6"
+)
+
+@Serializable
+@Entity(tableName = "agent_interaction_fts_content")
+data class AgentInteractionFtsContent(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val agentName: String,
+    val timestamp: Long = System.currentTimeMillis(),
+    val snippet: String,
+    val modelUsed: String = "gemini-3.5-flash",
+    val tag: String = ""
+)
+
+@Serializable
+@Entity(tableName = "self_healing_proposals")
+data class SelfHealingProposal(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val missionId: Int = 0,
+    val errorLogSnippet: String,
+    val rootCauseAnalysis: String,
+    val proposedCodeFix: String,
+    val architectAgentName: String = "Architekt Systemowy",
+    val status: String = "Pending", // Pending, Applied, Rejected
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Serializable
+@Entity(tableName = "workflow_dags")
+data class WorkflowDag(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val name: String,
+    val description: String,
+    val nodesJson: String, // List<DagNode> as JSON
+    val edgesJson: String, // List<DagEdge> as JSON
+    val colonyId: Int = 1,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Serializable
+@Entity(tableName = "colony_profiles")
+data class ColonyProfile(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val name: String,
+    val category: String, // "Zawodowa", "Prywatna", "R&D", "Edukacyjna"
+    val description: String,
+    val iconName: String = "group_work",
+    val isCurrentActive: Boolean = false,
+    val agentCount: Int = 5,
+    val createdTimestamp: Long = System.currentTimeMillis(),
+    val metadataJson: String = "{}"
+)
+
+@Serializable
+@Entity(tableName = "vector_embedding_logs")
+data class VectorEmbeddingLog(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val sourceText: String,
+    val embeddingVectorJson: String, // JSON float array representation
+    val tag: String = "General",
+    val agentName: String = "System",
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Serializable
+@Entity(tableName = "hallucination_audit_logs")
+data class HallucinationAuditLog(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val promptText: String,
+    val responseText: String,
+    val factCheckScore: Float, // 0.0 to 1.0
+    val verdict: String, // "Verified Fact", "Plausible", "Potential Hallucination"
+    val checkedClaimsJson: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
 
 
 
+
+
+
+
+@Entity(tableName = "user_agent_messages")
+data class UserAgentMessage(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val agentName: String,
+    val role: String, // "user", "model"
+    val content: String,
+    val timestamp: Long = System.currentTimeMillis()
+)

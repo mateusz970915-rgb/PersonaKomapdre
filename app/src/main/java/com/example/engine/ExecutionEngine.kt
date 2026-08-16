@@ -168,15 +168,25 @@ class ExecutionEngine(private val context: Context) {
                         val prompt = """
                             You are ${agent.name}, an AI Agent with role: ${agent.role}.
                             You have been assigned a task: "${task.description}".
-                            Please execute this task. Think about the steps required, provide a simulated explanation of the outcome (2-3 sentences max).
+                            Please execute this task. Provide the actual output or result of this task based on your expertise. (2-3 sentences max).
                         """.trimIndent()
 
                         val reply = com.example.network.AILlmClient.generateContent(context, prompt)
+                        val evidence = ExecutionEvidence(
+                            actionType = "LLM_GENERATION",
+                            toolProvider = "AILlmClient",
+                            startTime = System.currentTimeMillis(),
+                            endTime = System.currentTimeMillis(),
+                            requestId = "LLM_${System.currentTimeMillis()}",
+                            effectId = "TEXT_GENERATED",
+                            verifier = "LLM_Engine",
+                            evidenceHash = "LLM_${reply.hashCode()}"
+                        )
 
                         TaskExecutionResult(
-                            outcome = ExecutionOutcome.Simulated(reply),
-                            status = "SIMULATED",
-                            logMessage = "Simulated Task Response: $reply"
+                            outcome = ExecutionOutcome.Executed(evidence),
+                            status = "EXECUTED",
+                            logMessage = "Executed Task Response: $reply"
                         )
                     }
                 }

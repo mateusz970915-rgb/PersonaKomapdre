@@ -17,6 +17,8 @@ import com.patrykandpatrick.vico.compose.chart.line.lineChart
 import com.patrykandpatrick.vico.core.entry.entryModelOf
 
 import com.example.data.SubTask
+import com.example.ui.components.ChartContainerWithEmptyState
+import com.example.ui.components.isZeroOrEmpty
 import java.util.Calendar
 
 @Composable
@@ -25,9 +27,12 @@ fun WeeklyProductivityChart(
     decisionsCount: Int = 0,
     missionsCount: Int = 0,
     completedTasksList: List<SubTask> = emptyList(),
+    selectedChartType: String? = null,
+    onChartTypeSelected: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    var chartType by remember { mutableStateOf("Column") } // "Column" or "Line"
+    val initialType = if (selectedChartType == "Bar" || selectedChartType == "Column") "Column" else if (selectedChartType == "Line") "Line" else "Column"
+    var chartType by remember(selectedChartType) { mutableStateOf(initialType) }
 
     // Compute exact daily completions from database timestamps if available
     val dailyCounts = remember(completedTasksList, completedSubTasksCount, decisionsCount, missionsCount) {
@@ -87,13 +92,19 @@ fun WeeklyProductivityChart(
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     FilterChip(
                         selected = chartType == "Column",
-                        onClick = { chartType = "Column" },
+                        onClick = {
+                            chartType = "Column"
+                            onChartTypeSelected?.invoke("Bar")
+                        },
                         label = { Text("Bars", style = MaterialTheme.typography.labelSmall) },
                         modifier = Modifier.testTag("chart_type_bars")
                     )
                     FilterChip(
                         selected = chartType == "Line",
-                        onClick = { chartType = "Line" },
+                        onClick = {
+                            chartType = "Line"
+                            onChartTypeSelected?.invoke("Line")
+                        },
                         label = { Text("Line", style = MaterialTheme.typography.labelSmall) },
                         modifier = Modifier.testTag("chart_type_line")
                     )
@@ -103,27 +114,34 @@ fun WeeklyProductivityChart(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Vico Chart Rendering
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
+            ChartContainerWithEmptyState(
+                hasData = !chartModel.isZeroOrEmpty(),
+                emptyTitle = "No Productivity Data",
+                emptyMessage = "No task completions recorded for this week.",
+                emptyStateHeight = 200.dp
             ) {
-                if (chartType == "Column") {
-                    Chart(
-                        chart = columnChart(),
-                        model = chartModel,
-                        startAxis = rememberStartAxis(),
-                        bottomAxis = rememberBottomAxis(),
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Chart(
-                        chart = lineChart(),
-                        model = chartModel,
-                        startAxis = rememberStartAxis(),
-                        bottomAxis = rememberBottomAxis(),
-                        modifier = Modifier.fillMaxSize()
-                    )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                ) {
+                    if (chartType == "Column") {
+                        Chart(
+                            chart = columnChart(),
+                            model = chartModel,
+                            startAxis = rememberStartAxis(),
+                            bottomAxis = rememberBottomAxis(),
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Chart(
+                            chart = lineChart(),
+                            model = chartModel,
+                            startAxis = rememberStartAxis(),
+                            bottomAxis = rememberBottomAxis(),
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
             }
 

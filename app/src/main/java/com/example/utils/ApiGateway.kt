@@ -1,52 +1,65 @@
 package com.example.utils
 
 import android.util.Log
-import io.ktor.server.application.*
-import io.ktor.server.engine.*
-import io.ktor.server.netty.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
-import io.ktor.server.plugins.cors.routing.*
+import com.sun.net.httpserver.HttpServer
+import com.sun.net.httpserver.HttpHandler
+import com.sun.net.httpserver.HttpExchange
+import java.io.OutputStream
+import java.net.InetSocketAddress
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 object ApiGateway {
-    private var server: NettyApplicationEngine? = null
+    private var server: HttpServer? = null
 
     fun startServer(port: Int = 8080, onMessageReceived: (String) -> Unit) {
         if (server != null) return
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                server = embeddedServer(Netty, host = "127.0.0.1", port = port) {
-                    install(CORS) {
-                        allowHost("localhost")
-                        allowHost("127.0.0.1")
-                        allowHeader(io.ktor.http.HttpHeaders.ContentType)
-                    }
-                    routing {
-                        get("/") {
-                            call.respondText("Colony API Gateway Running")
+                server = HttpServer.create(InetSocketAddress("127.0.0.1", port), 0).apply {
+                    createContext("/") { exchange ->
+                        val response = "Colony API Gateway Running"
+                        exchange.sendResponseHeaders(200, response.length.toLong())
+                        exchange.responseBody.use { os ->
+                            os.write(response.toByteArray())
                         }
-                        post("/webhook") {
-                            // Simple text receiver for now
-                            val content = "Webhook received" // call.receiveText() requires ContentNegotiation, simplify for now
+                    }
+                    createContext("/webhook") { exchange ->
+                        if ("POST" == exchange.requestMethod) {
+                            val content = "Webhook received"
                             onMessageReceived(content)
-                            call.respondText("Acknowledged")
+                            val response = "Acknowledged"
+                            exchange.sendResponseHeaders(200, response.length.toLong())
+                            exchange.responseBody.use { os ->
+                                os.write(response.toByteArray())
+                            }
+                        } else {
+                            val response = "Method Not Allowed"
+                            exchange.sendResponseHeaders(405, response.length.toLong())
+                            exchange.responseBody.use { os ->
+                                os.write(response.toByteArray())
+                            }
                         }
                     }
-                }.start(wait = false)
-                Log.d("ApiGateway", "Server started on port $port")
+                    executor = null
+                    start()
+                }
+                Log.d("ApiGateway", "Lightweight native HttpServer started on port $port")
             } catch (e: Exception) {
-                Log.e("ApiGateway", "Failed to start server", e)
+                Log.e("ApiGateway", "Failed to start native HttpServer", e)
             }
         }
     }
 
     fun stopServer() {
-        server?.stop(1000, 2000)
-        server = null
-        Log.d("ApiGateway", "Server stopped")
+        try {
+            server?.stop(0)
+            server = null
+            Log.d("ApiGateway", "Lightweight native HttpServer stopped")
+        } catch (e: Exception) {
+            Log.e("ApiGateway", "Failed to stop native HttpServer", e)
+        }
     }
 }

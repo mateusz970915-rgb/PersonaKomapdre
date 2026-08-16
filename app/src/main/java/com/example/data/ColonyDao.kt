@@ -26,6 +26,9 @@ interface ColonyDao {
     @Query("SELECT COUNT(*) FROM agents")
     suspend fun getAgentCount(): Int
 
+    @androidx.room.RawQuery
+    fun checkIntegrity(query: androidx.sqlite.db.SupportSQLiteQuery): android.database.Cursor
+
     @Query("SELECT * FROM council_messages ORDER BY timestamp ASC")
     fun getCouncilMessages(): Flow<List<CouncilMessage>>
 
@@ -64,6 +67,12 @@ interface ColonyDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSubTask(subTask: SubTask)
+    
+    @Query("DELETE FROM sub_tasks WHERE id = :id")
+    suspend fun deleteSubTaskById(id: Int)
+    
+    @Query("DELETE FROM sub_tasks WHERE id IN (:ids)")
+    suspend fun deleteSubTasksByIds(ids: List<Int>)
     
     @Query("UPDATE agents SET status = :status WHERE id = :id")
     suspend fun updateAgentStatus(id: Int, status: String)
@@ -182,7 +191,7 @@ interface ColonyDao {
     @Query("SELECT COUNT(*) FROM rule_connections")
     suspend fun getRuleConnectionCount(): Int
 
-    @Query("SELECT * FROM sub_tasks WHERE status IN ('Completed', 'EXECUTED', 'SIMULATED')")
+    @Query("SELECT * FROM sub_tasks WHERE status IN ('Completed', 'EXECUTED')")
     fun getCompletedSubTasks(): Flow<List<SubTask>>
 
     // Mission State Logs
@@ -303,5 +312,116 @@ interface ColonyDao {
 
     @Query("DELETE FROM sleep_records")
     suspend fun clearSleepRecords()
-}
+    
+    // Agent Sentiment Logs
+    @Query("SELECT * FROM agent_sentiment_logs WHERE agentName = :agentName ORDER BY timestamp ASC")
+    fun getSentimentLogsForAgent(agentName: String): Flow<List<AgentSentimentLog>>
+    
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSentimentLog(log: AgentSentimentLog)
 
+    // Failover configuration
+    @Query("UPDATE agents SET failoverAgentId = :failoverAgentId, maxLatencyThresholdMs = :thresholdMs WHERE id = :id")
+    suspend fun updateAgentFailoverConfig(id: Int, failoverAgentId: Int?, thresholdMs: Long)
+
+    // Chart Annotations
+    @Query("SELECT * FROM chart_annotations ORDER BY timestamp ASC")
+    fun getAllChartAnnotations(): Flow<List<ChartAnnotation>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertChartAnnotation(annotation: ChartAnnotation): Long
+
+    @Query("DELETE FROM chart_annotations WHERE id = :id")
+    suspend fun deleteChartAnnotation(id: Int)
+
+    // FTS5 Full-Text Search
+    @Query("""
+        SELECT * FROM agent_interaction_fts_content
+        WHERE snippet LIKE '%' || :query || '%' OR agentName LIKE '%' || :query || '%' OR tag LIKE '%' || :query || '%'
+        ORDER BY timestamp DESC
+    """)
+    fun searchFtsInteractions(query: String): Flow<List<AgentInteractionFtsContent>>
+
+    @Query("SELECT * FROM agent_interaction_fts_content ORDER BY timestamp DESC")
+    fun getAllFtsContent(): Flow<List<AgentInteractionFtsContent>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFtsContent(content: AgentInteractionFtsContent): Long
+
+    // Database Cleanup & Retention Policy
+    @Query("DELETE FROM agent_mesh_telemetry WHERE timestamp < :cutoffTimestamp")
+    suspend fun deleteTelemetryOlderThan(cutoffTimestamp: Long): Int
+
+    @Query("DELETE FROM llm_call_telemetry WHERE timestamp < :cutoffTimestamp")
+    suspend fun deleteLlmTelemetryOlderThan(cutoffTimestamp: Long): Int
+
+    @Query("DELETE FROM data_access_requests WHERE timestamp < :cutoffTimestamp")
+    suspend fun deleteDataAccessRequestsOlderThan(cutoffTimestamp: Long): Int
+
+    @Query("DELETE FROM agent_interaction_fts_content WHERE timestamp < :cutoffTimestamp")
+    suspend fun deleteFtsInteractionsOlderThan(cutoffTimestamp: Long): Int
+
+    // Self-Healing Proposals
+    @Query("SELECT * FROM self_healing_proposals ORDER BY timestamp DESC")
+    fun getAllSelfHealingProposals(): Flow<List<SelfHealingProposal>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSelfHealingProposal(proposal: SelfHealingProposal): Long
+
+    @Query("UPDATE self_healing_proposals SET status = :status WHERE id = :id")
+    suspend fun updateSelfHealingProposalStatus(id: Int, status: String)
+
+    // Workflow DAGs
+    @Query("SELECT * FROM workflow_dags ORDER BY timestamp DESC")
+    fun getAllWorkflowDags(): Flow<List<WorkflowDag>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertWorkflowDag(dag: WorkflowDag): Long
+
+    @Query("DELETE FROM workflow_dags WHERE id = :id")
+    suspend fun deleteWorkflowDag(id: Int)
+
+    // Colony Profiles
+    @Query("SELECT * FROM colony_profiles ORDER BY id ASC")
+    fun getAllColonyProfiles(): Flow<List<ColonyProfile>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertColonyProfile(profile: ColonyProfile): Long
+
+    @Query("UPDATE colony_profiles SET isCurrentActive = (id = :activeId)")
+    suspend fun setActiveColonyProfile(activeId: Int)
+
+    // Vector Embeddings
+    @Query("SELECT * FROM vector_embedding_logs ORDER BY timestamp DESC")
+    fun getAllVectorEmbeddingLogs(): Flow<List<VectorEmbeddingLog>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertVectorEmbeddingLog(log: VectorEmbeddingLog): Long
+
+    // Hallucination Audit Logs
+    @Query("SELECT * FROM hallucination_audit_logs ORDER BY timestamp DESC")
+    fun getAllHallucinationAuditLogs(): Flow<List<HallucinationAuditLog>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHallucinationAuditLog(log: HallucinationAuditLog): Long
+
+    @Query("SELECT * FROM user_agent_messages WHERE agentName = :agentName ORDER BY timestamp ASC")
+    fun getUserAgentMessages(agentName: String): Flow<List<UserAgentMessage>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertUserAgentMessage(message: UserAgentMessage)
+
+    @Query("DELETE FROM user_agent_messages WHERE agentName = :agentName")
+    suspend fun clearUserAgentMessages(agentName: String)
+
+
+    @Query("SELECT * FROM persona_agents")
+    fun getAllPersonaAgents(): Flow<List<PersonaAgent>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPersonaAgent(agent: PersonaAgent)
+
+    @Query("DELETE FROM persona_agents WHERE id = :id")
+    suspend fun deletePersonaAgentById(id: Int)
+
+}

@@ -1,0 +1,188 @@
+{
+  "audit_date": "2026-08-15",
+  "baseline_cycle": "2026-07-26",
+  "verdict": "BLOCKED",
+  "classification": "Functional Android prototype with substantive real fixes since last cycle (signing, key storage, migrations, service-to-worker conversion); still not production-ready. Build remains unverifiable (corrupt wrapper, unresolved) and the fix intended to remove fake-success introduced a new instance of it in a different code path.",
+  "overall_production_score": 4.5,
+  "prototype_score": 7.5,
+  "previous_scores": {
+    "overall_production_score": 3.5,
+    "prototype_score": 6.5
+  },
+  "artifacts": {
+    "source_zip": "persona-android-system__1_.zip",
+    "source_zip_sha256": "2983d96fc95d2b589a2890b1e9539bd81f3277fe62c633206ddb53685a7a2920",
+    "apk_zip": null,
+    "apk_note": "No APK provided in this cycle; source-only review.",
+    "gradle_wrapper": "corrupt",
+    "gradle_wrapper_sha256": "a5e75118d96b4eac2100876f6af6a5ca5029cd440f87736425350fb4cf308b42",
+    "gradle_wrapper_verification_command": "unzip -t gradle/wrapper/gradle-wrapper.jar",
+    "gradle_wrapper_verification_result": "error: start of central directory not found; zipfile corrupt",
+    "kotlin_files": 145,
+    "kotlin_lines": 42704,
+    "kotlin_lines_prev_cycle": 26400,
+    "test_files": 8,
+    "db_schema_version": 31,
+    "db_schema_version_prev_cycle": 21,
+    "agp_version": "9.1.1",
+    "kotlin_version": "2.2.10",
+    "declared_gradle_version": "9.3.1",
+    "loose_patch_scripts_root": 33,
+    "loose_patch_files_root": 2
+  },
+  "p0_status_from_prior_cycle": [
+    {
+      "id": "P0-1a",
+      "title": "Fake-success in ExecutionEngine: CALENDAR_SYNC",
+      "prior_status": "confirmed",
+      "current_status": "resolved",
+      "evidence": "ExecutionEngine.kt:66-106 — real ContentResolver query against CalendarContract.Events.CONTENT_URI, real eventCount, exception handled as FAILED"
+    },
+    {
+      "id": "P0-1b",
+      "title": "Fake-success in ExecutionEngine: RULE_EVALUATION",
+      "prior_status": "confirmed",
+      "current_status": "resolved",
+      "evidence": "ExecutionEngine.kt:107-152 — real WorkManager.enqueue(), polls WorkInfo up to 15x1s, EXECUTED only if WorkInfo.State.SUCCEEDED"
+    },
+    {
+      "id": "P0-2",
+      "title": "Corrupted Gradle wrapper prevents reproducible build and tests",
+      "prior_status": "confirmed",
+      "current_status": "confirmed",
+      "evidence": "gradle/wrapper/gradle-wrapper.jar — re-verified corrupt via unzip -t, unchanged from prior cycle"
+    },
+    {
+      "id": "P0-3",
+      "title": "APK debug-signed; release may fall back to debug signing",
+      "prior_status": "confirmed",
+      "current_status": "resolved",
+      "evidence": "app/build.gradle.kts:31-61 — no debug fallback for release signingConfig; throws GradleException if keystore missing on a release task"
+    },
+    {
+      "id": "P0-4",
+      "title": "API keys stored as plain DataStore strings",
+      "prior_status": "confirmed",
+      "current_status": "resolved",
+      "evidence": "LocalEncryptedVault.kt (AndroidKeyStore + AES/GCM/256) wired into AgentPreferencesRepository.kt:100,102,207,220"
+    },
+    {
+      "id": "P0-5",
+      "title": "Autonomy and data access preferences are not enforced",
+      "prior_status": "confirmed",
+      "current_status": "partially_resolved",
+      "evidence": "PolicyEnforcementPoint.kt is real and wired into ExecutionEngine.kt and AILlmClient.kt:220, but MainActivity.kt:68, BaseAgentViewModel.kt:296/306, ColonyViewModel.kt:299 call WorkManager.enqueue() directly, bypassing it"
+    },
+    {
+      "id": "P0-6",
+      "title": "Panic mode updates database statuses but does not stop runtime work",
+      "prior_status": "confirmed",
+      "current_status": "partially_resolved",
+      "evidence": "PanicTileService.kt:29,32 now calls WorkManager.cancelAllWork() and ApiGateway.stopServer() (both verified real); does not cancel in-flight OkHttp/Retrofit calls or general coroutine scopes"
+    },
+    {
+      "id": "P0-7",
+      "title": "Production database can destructively migrate",
+      "prior_status": "confirmed",
+      "current_status": "partially_resolved",
+      "evidence": "AppDatabase.kt: migration chain now complete MIGRATION_9_10..MIGRATION_30_31 (no gaps); fallbackToDestructiveMigration() still unconditional across all product flavors incl. production"
+    },
+    {
+      "id": "P0-8",
+      "title": "Long-running dataSync foreground service conflicts with modern Android limits",
+      "prior_status": "confirmed",
+      "current_status": "resolved",
+      "evidence": "AgentRestSchedulerService removed entirely; replaced by AgentRestSchedulerWorker (CoroutineWorker); zero startForeground() calls anywhere in repo"
+    }
+  ],
+  "new_findings_this_cycle": [
+    {
+      "id": "P0-1c",
+      "severity": "P0",
+      "title": "Regression: honest SIMULATED status replaced with false EXECUTED in ExecutionEngine default/LLM branch",
+      "evidence": "ExecutionEngine.kt:153-192 — fix_engine.patch changed ExecutionOutcome.Simulated/status=SIMULATED to ExecutionOutcome.Executed/status=EXECUTED for every actionType other than CALENDAR_SYNC and RULE_EVALUATION; 'evidence' is only a hash of the LLM's own free-text reply",
+      "note": "This branch is the else/default case, so it is hit by any actionType not explicitly CALENDAR_SYNC or RULE_EVALUATION - likely the most common path."
+    },
+    {
+      "id": "P1-NEW-1",
+      "severity": "P1",
+      "title": "ExecutionEngineTest.kt assertions stale relative to current ExecutionEngine contract",
+      "evidence": "ExecutionEngineTest.kt still accepts status==\"SIMULATED\" (code can no longer return it) and does not account for status==\"EXECUTED\" (code can now return it via the regressed branch); passes today only because the Robolectric test environment happens to hit the BLOCKED branch first"
+    },
+    {
+      "id": "P1-NEW-2",
+      "severity": "P1",
+      "title": "AgentCommandInjectionScreen is fully navigable UI theater",
+      "evidence": "ui/AgentCommandInjectionScreen.kt, wired at MainActivity.kt:511 route 'command_injection'; viewModel parameter passed but never referenced in the function body (0 usages); 'agent response' is a hardcoded canned string claiming injection into an event queue that never happens"
+    },
+    {
+      "id": "P1-NEW-3",
+      "severity": "P1",
+      "title": "AgentResourceMonitorWorker uses Math.random() as fake threshold detection, self-documented as simulation",
+      "evidence": "workers/AgentResourceMonitorWorker.kt — 'val exceededThreshold = Math.random() > 0.8 // Simulate 20% chance of exceeding threshold'; hardcoded agent name 'Syntezator Danych' in the log message regardless of actual colony state; code comment admits 'In a real app, we would trigger a local Notification here'"
+    },
+    {
+      "id": "P2-NEW-1",
+      "severity": "P2",
+      "title": "AgentResourceMonitorWorker enqueued without enqueueUniquePeriodicWork",
+      "evidence": "MainActivity.kt:67-68 uses plain WorkManager.enqueue() for a PeriodicWorkRequest; the other 8 periodic workers in the same file correctly use enqueueUniquePeriodicWork with ExistingPeriodicWorkPolicy.KEEP; causes duplicate periodic worker chains to accumulate across app cold starts"
+    },
+    {
+      "id": "P2-NEW-2",
+      "severity": "P2",
+      "title": "Backup exclusion rules reference a SharedPreferences filename that does not match the actual vault file",
+      "evidence": "backup_rules.xml and data_extraction_rules.xml exclude 'secret_vault.xml'; LocalEncryptedVault.kt:16 actually creates 'encrypted_vault_prefs.xml'. Low practical risk since the AES key is Keystore-bound and non-exportable, but the exclusion rule is dead as written."
+    },
+    {
+      "id": "P3-NEW-1",
+      "severity": "P3",
+      "title": "Manifest declares FOREGROUND_SERVICE / FOREGROUND_SERVICE_DATA_SYNC permissions with no corresponding foreground service in code",
+      "evidence": "AndroidManifest.xml declares both permissions; zero startForeground() calls anywhere in app/src/main after the P0-8 Service-to-Worker conversion"
+    },
+    {
+      "id": "P3-CARRYOVER-1",
+      "severity": "P3",
+      "title": "ACTIVITY_RECOGNITION requested at runtime but not declared in manifest (unresolved from prior cycle)",
+      "evidence": "MainActivity.kt:79 adds android.Manifest.permission.ACTIVITY_RECOGNITION to the runtime request list; AndroidManifest.xml does not declare <uses-permission android:name=\"android.permission.ACTIVITY_RECOGNITION\"/>"
+    }
+  ],
+  "checked_and_ruled_out": [
+    {
+      "title": "Suspected escaped-dollar string-interpolation bug in evolve_patch.patch",
+      "result": "false_positive",
+      "evidence": "Patch diff displayed \\$contactPermGranted-style escaping; live source at ColonyViewModel.kt:2005-2008 shows correct unescaped interpolation. Artifact of diff rendering, not an actual bug in applied code."
+    }
+  ],
+  "reality_matrix": {
+    "compose_ui": "REAL",
+    "room_database": "REAL",
+    "gemini_api": "REAL",
+    "openrouter_api": "REAL",
+    "api_key_storage": "REAL (was PLAINTEXT)",
+    "calendar_sync": "REAL (was FAKE_SUCCESS)",
+    "rule_worker_enqueue_from_execution_engine": "REAL (was FAKE_SUCCESS)",
+    "llm_generic_task_execution": "FAKE_SUCCESS (new; was honestly labeled SIMULATED)",
+    "agent_command_injection_screen": "UI_ONLY_FAKE (new)",
+    "agent_resource_monitor_worker": "FAKE_RANDOM (new)",
+    "local_gemma": "SIMULATED (not re-verified this cycle)",
+    "smart_home": "MOCK (not re-verified this cycle)",
+    "webhook": "PARTIAL_MISLEADING (unchanged logic; now bound to localhost only)",
+    "sandbox": "SIMULATION (not re-verified this cycle)",
+    "council_chat": "PERSONA_SIMULATION (not re-verified this cycle)",
+    "mesh_telemetry": "SIMULATION (re-confirmed, unchanged)",
+    "evolution_heuristics": "PARTIAL (was SIMULATION; now real LLM call for policy text, but confidence is a hardcoded constant 0.85f and successCount, while no longer randomized, is not measurement-derived)",
+    "panic_mode": "PARTIAL_IMPROVED (was PARTIAL; now cancels all WorkManager work and stops local HTTP server for real; does not cancel in-flight HTTP calls or coroutines)",
+    "security_preferences": "PARTIALLY_ENFORCED (was UI_ONLY; PolicyEnforcementPoint real and wired into main execution paths; bypassable via 4 direct WorkManager.enqueue() call sites for auxiliary workers)"
+  },
+  "closure_gate": [
+    {"item": "Reproducible clean build and test suite", "status": "open"},
+    {"item": "Release signing with non-debug key", "status": "closed"},
+    {"item": "Real effect evidence for every EXECUTED result", "status": "open", "note": "regressed by P0-1c"},
+    {"item": "Runtime enforcement of user policies", "status": "partial"},
+    {"item": "Secure key storage and explicit backup exclusions", "status": "partial", "note": "storage fixed; backup exclusion filename mismatch (P2-NEW-2)"},
+    {"item": "Non-destructive verified database migrations", "status": "partial", "note": "chain complete; destructive fallback still unconditional"},
+    {"item": "Modern compliant background work", "status": "closed"},
+    {"item": "Explicit provenance labels for simulated data", "status": "open", "note": "worsened: LLM output now falsely labeled EXECUTED instead of SIMULATED"},
+    {"item": "Test suite reflects current implementation", "status": "open", "note": "new gate item; ExecutionEngineTest.kt stale (P1-NEW-1)"}
+  ]
+}

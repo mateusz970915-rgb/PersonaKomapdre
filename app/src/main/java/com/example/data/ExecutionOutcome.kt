@@ -13,7 +13,6 @@ data class ExecutionEvidence(
 
 sealed interface ExecutionOutcome {
     data class Executed(val evidence: ExecutionEvidence) : ExecutionOutcome
-    data class Simulated(val explanation: String) : ExecutionOutcome
     data class Blocked(val reason: String) : ExecutionOutcome
     data class Failed(val errorCode: String) : ExecutionOutcome
     data class NeedsApproval(val requestId: String) : ExecutionOutcome

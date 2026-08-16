@@ -32,9 +32,20 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CustomAgentDefinition::class,
         Flashcard::class,
         Subscription::class,
-        SleepRecord::class
+        SleepRecord::class,
+        AgentSentimentLog::class,
+        ChartAnnotation::class,
+        AgentInteractionFtsContent::class,
+        SelfHealingProposal::class,
+        WorkflowDag::class,
+        ColonyProfile::class,
+        VectorEmbeddingLog::class,
+        HallucinationAuditLog::class,
+        AgentPersona::class,
+        UserAgentMessage::class,
+        PersonaAgent::class
     ],
-    version = 24,
+    version = 33,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -268,6 +279,145 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_24_25 = object : Migration(24, 25) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `agents` ADD COLUMN `isFavorite` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val MIGRATION_25_26 = object : Migration(25, 26) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `agent_sentiment_logs` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `agentName` TEXT NOT NULL,
+                        `emoji` TEXT NOT NULL,
+                        `moodTitle` TEXT NOT NULL,
+                        `timestamp` INTEGER NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_agent_sentiment_logs_agentName` ON `agent_sentiment_logs` (`agentName`)")
+            }
+        }
+
+        val MIGRATION_26_27 = object : Migration(26, 27) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `agents` ADD COLUMN `category` TEXT NOT NULL DEFAULT 'General'")
+            }
+        }
+
+        val MIGRATION_27_28 = object : Migration(27, 28) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `agents` ADD COLUMN `failoverAgentId` INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE `agents` ADD COLUMN `maxLatencyThresholdMs` INTEGER NOT NULL DEFAULT 5000")
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `chart_annotations` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `timestamp` INTEGER NOT NULL,
+                        `note` TEXT NOT NULL,
+                        `tag` TEXT NOT NULL,
+                        `agentId` INTEGER,
+                        `colorHex` TEXT NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `agent_interaction_fts_content` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `agentName` TEXT NOT NULL,
+                        `timestamp` INTEGER NOT NULL,
+                        `snippet` TEXT NOT NULL,
+                        `modelUsed` TEXT NOT NULL,
+                        `tag` TEXT NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    CREATE VIRTUAL TABLE IF NOT EXISTS `agent_interaction_fts` USING fts5(
+                        `agentName`,
+                        `snippet`,
+                        `modelUsed`,
+                        `tag`,
+                        content=`agent_interaction_fts_content`,
+                        content_rowid=`id`
+                    )
+                """.trimIndent())
+            }
+        }
+        val MIGRATION_28_29: Migration = object : Migration(28, 29) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Version 29 was added destructively previously, creating the missing tables
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `SelfHealingProposal` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `missionId` INTEGER NOT NULL,
+                        `errorLogSnippet` TEXT NOT NULL,
+                        `rootCauseAnalysis` TEXT NOT NULL,
+                        `proposedCodeFix` TEXT NOT NULL,
+                        `architectAgentName` TEXT NOT NULL,
+                        `status` TEXT NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `WorkflowDag` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `description` TEXT NOT NULL,
+                        `nodesJson` TEXT NOT NULL,
+                        `edgesJson` TEXT NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `ColonyProfile` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `category` TEXT NOT NULL,
+                        `description` TEXT NOT NULL,
+                        `iconName` TEXT NOT NULL,
+                        `isCurrentActive` INTEGER NOT NULL,
+                        `agentCount` INTEGER NOT NULL,
+                        `createdTimestamp` INTEGER NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `VectorEmbeddingLog` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `sourceText` TEXT NOT NULL,
+                        `tag` TEXT NOT NULL,
+                        `embeddingVectorJson` TEXT NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `HallucinationAuditLog` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `promptText` TEXT NOT NULL,
+                        `responseText` TEXT NOT NULL,
+                        `factCheckScore` REAL NOT NULL,
+                        `verdict` TEXT NOT NULL,
+                        `checkedClaimsJson` TEXT NOT NULL
+                    )
+                """.trimIndent())
+            }
+        }
+
+        val MIGRATION_29_30: Migration = object : Migration(29, 30) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `ColonyProfile` ADD COLUMN `metadataJson` TEXT NOT NULL DEFAULT '{}'")
+            }
+        }
+
+        val MIGRATION_30_31: Migration = object : Migration(30, 31) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `agent_personas` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `agentName` TEXT NOT NULL,
+                        `characterTraits` TEXT NOT NULL,
+                        `operationalRole` TEXT NOT NULL,
+                        `communicationStyle` TEXT NOT NULL
+                    )
+                """.trimIndent())
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -290,8 +440,16 @@ abstract class AppDatabase : RoomDatabase() {
                     MIGRATION_20_21,
                     MIGRATION_21_22,
                     MIGRATION_22_23,
-                    MIGRATION_23_24
+                    MIGRATION_23_24,
+                    MIGRATION_24_25,
+                    MIGRATION_25_26,
+                    MIGRATION_26_27,
+                    MIGRATION_27_28,
+                    MIGRATION_28_29,
+                    MIGRATION_29_30,
+                    MIGRATION_30_31
                 )
+                .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
                 instance
