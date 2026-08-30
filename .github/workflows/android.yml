@@ -50,15 +50,6 @@ jobs:
             esac
           done < <(find app/src/main/res -type f -print0)
 
-      - name: Upload prepared source for repair
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: personamesh-source-for-repair
-          path: personamesh-attached
-          if-no-files-found: error
-          retention-days: 7
-
       - name: Run production lint
         working-directory: personamesh-attached
         run: ./gradlew :app:lintProductionDebug --stacktrace
