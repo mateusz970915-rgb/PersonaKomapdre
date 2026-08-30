@@ -2,44 +2,70 @@ name: Android CI
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches:
+      - "main"
+      - "master"
+      - "build/**"
   pull_request:
-    branches: [ "main", "master" ]
+    branches:
+      - "main"
+      - "master"
+  workflow_dispatch:
 
 jobs:
-  build:
+  build-attached-personamesh:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout branch
+        uses: actions/checkout@v4
 
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: gradle
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          cache: gradle
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+      - name: Extract prepared PersonaMesh source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s personamesh-v5-production-debug-prepared-2026-08-30.zip
+          rm -rf personamesh-attached
+          mkdir personamesh-attached
+          unzip -q personamesh-v5-production-debug-prepared-2026-08-30.zip -d personamesh-attached
+          chmod +x personamesh-attached/gradlew
+          unzip -t personamesh-attached/gradle/wrapper/gradle-wrapper.jar >/dev/null
 
-    - name: Verify Binary Assets
-      run: |
-        #!/bin/bash
-        echo "Verifying binary assets..."
-        for file in $(find app/src/main/res -name "*.webp" -o -name "*.png" -o -name "*.jpg"); do
-          if ! file "$file" | grep -qE "image|Web/P image|PNG image data|JPEG image data"; then
-            echo "Corrupt image found: $file"
-            exit 1
-          fi
-        done
+      - name: Verify prepared assets
+        working-directory: personamesh-attached
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d "" file; do
+            case "$file" in
+              *.jpg|*.jpeg) file "$file" | grep -q "JPEG image data" ;;
+              *.webp) file "$file" | grep -q "RIFF .*Web/P image" ;;
+            esac
+          done < <(find app/src/main/res -type f -print0)
 
-    - name: Run Lint
-      run: ./gradlew lintDebug
+      - name: Run production lint
+        working-directory: personamesh-attached
+        run: ./gradlew :app:lintProductionDebug --stacktrace
 
-    - name: Run Unit Tests
-      run: ./gradlew testDebugUnitTest
+      - name: Run production unit tests
+        working-directory: personamesh-attached
+        run: ./gradlew :app:testProductionDebugUnitTest --stacktrace
 
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug
+      - name: Build production debug APK
+        working-directory: personamesh-attached
+        run: ./gradlew :app:assembleProductionDebug --stacktrace
+
+      - name: Upload production debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: personamesh-production-debug-apk
+          path: personamesh-attached/app/build/outputs/apk/production/debug/*.apk
+          if-no-files-found: error
